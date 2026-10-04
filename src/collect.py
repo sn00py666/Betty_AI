@@ -141,15 +141,27 @@ async def collect_one(name, client, directory=DATA):
         matches = PARSERS[name](text)
         # Пустой список после непустого может означать изменение формата, а не исчезновение линии.
         if not matches:
-            raise StopSource("Нет матчей CS2: требуется проверить источник; старый снимок не обновлён")
+            raise StopSource("Нет подходящих матчей: требуется проверить источник; старый снимок не обновлён")
         fetched = time.time()
+        for match in matches:
+            match.setdefault("sport", "cs2")
+        # Срок хранения отдельно для каждого матча: live не сокращает срок прематча того же источника.
+        timed_matches = [
+            {
+                **match,
+                "expires_at": datetime.fromtimestamp(
+                    fetched + (60 if match["status"] == "live" else INTERVAL), UTC
+                ).isoformat(),
+            }
+            for match in matches
+        ]
         snapshot = {
             "bookmaker": name,
             "fetched_at": datetime.fromtimestamp(fetched, UTC).isoformat(),
             "expires_at": datetime.fromtimestamp(
                 fetched + (60 if any(m["status"] == "live" for m in matches) else INTERVAL), UTC
             ).isoformat(),
-            "matches": matches,
+            "matches": timed_matches,
         }
         digest = hashlib.sha256(json.dumps(matches, sort_keys=True).encode()).hexdigest()
         if digest != state.get("digest"):
@@ -200,7 +212,7 @@ async def run(names, watch):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Редкие снимки линии CS2")
+    parser = argparse.ArgumentParser(description="Редкие снимки линии CS2 / Dota 2")
     parser.add_argument("bookmakers", nargs="*", help="fonbet marathon pari betboom leon winline")
     parser.add_argument("--watch", action="store_true", help="оставаться запущенным и соблюдать сохранённые паузы")
     args = parser.parse_args()

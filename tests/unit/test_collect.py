@@ -251,3 +251,25 @@ async def test_new_browser_collectors_save_or_pause(tmp_path, monkeypatch, name,
         assert state["paused"]
     else:
         assert state["next_request"] >= time.time() + 7199
+
+
+def test_dota_series_is_included_but_draw_market_is_excluded():
+    data = {
+        "sports": [{"id": 1, "name": "Dota 2. BLAST Slam. Bo3"}],
+        "events": [
+            {
+                "id": 2,
+                "sportId": 1,
+                "level": 1,
+                "place": "line",
+                "team1": "Team A",
+                "team2": "Team B",
+                "startTime": 1791450000,
+            }
+        ],
+        "customFactors": [{"e": 2, "factors": [{"f": 921, "v": 1.5}, {"f": 923, "v": 2.5}]}],
+    }
+    match = parse_fonbet(json.dumps(data))[0]
+    assert match["sport"] == "dota2" and match["best_of"] == 3
+    data["customFactors"][0]["factors"].append({"f": 922, "v": 3})
+    assert parse_fonbet(json.dumps(data)) == []

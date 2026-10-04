@@ -1,4 +1,4 @@
-"""CS2: победитель всей серии; live и прематч помечены отдельно."""
+"""CS2 / Dota 2: победитель всей серии; live и прематч помечены отдельно."""
 
 import json
 import math
@@ -32,7 +32,11 @@ def parse_fonbet(text, bookmaker="fonbet"):
     data = json.loads(text)
     if not all(isinstance(data.get(key), list) for key in ("sports", "events", "customFactors")):
         raise ValueError(f"Изменился формат линии {bookmaker}")
-    tournaments = {s["id"]: s["name"] for s in data["sports"] if "Counter-Strike" in s.get("name", "")}
+    tournaments = {
+        s["id"]: s["name"]
+        for s in data["sports"]
+        if "Counter-Strike" in s.get("name", "") or s.get("name", "").startswith("Dota 2.")
+    }
     factors = {f["e"]: f for f in data["customFactors"]}
     matches = []
     for event in data["events"]:
@@ -45,9 +49,13 @@ def parse_fonbet(text, bookmaker="fonbet"):
         suspended = bool(event.get("blocked") or market.get("blocked"))
         tournament = tournaments[event["sportId"]]
         best_of = re.search(r"\bBo([135])\b", tournament, re.IGNORECASE)
+        sport = "dota2" if tournament.startswith("Dota 2.") else "cs2"
+        if sport == "dota2" and (not best_of or 922 in odds):
+            continue  # Не сравниваем двухисходный рынок с BO2/ничьей.
         matches.append(
             {
                 "id": str(event["id"]),
+                "sport": sport,
                 "team1": event["team1"],
                 "team2": event["team2"],
                 "tournament": tournament,
