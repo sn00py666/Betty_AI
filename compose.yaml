@@ -1,0 +1,34 @@
+x-common: &common
+  image: betty-ai:local
+  build: .
+  init: true
+  restart: unless-stopped
+  read_only: true
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  volumes:
+    - ./data:/app/data
+  tmpfs:
+    - /tmp:size=512m,mode=1777
+    - /home/app:size=64m,uid=10001,gid=10001,mode=0700
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+  stop_grace_period: 30s
+
+services:
+  bot:
+    <<: *common
+    env_file: .env
+    mem_limit: 512m
+    cpus: 0.3
+  collector:
+    <<: *common
+    command: ["xvfb-run", "-a", "python", "src/collect.py", "--watch"]
+    mem_limit: 2g
+    shm_size: 256m
+    cpus: 0.8

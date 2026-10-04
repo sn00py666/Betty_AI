@@ -1,0 +1,40 @@
+# Секреты и локальные настройки
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python и виртуальные окружения
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Инструменты разработки
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Локальные данные
+*.log
+*.sqlite
+*.sqlite3
+*.db
+data/*
+!data/.gitkeep
+logs/*
+!logs/.gitkeep
+
+# Редакторы и ОС
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

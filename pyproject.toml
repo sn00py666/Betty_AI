@@ -1,0 +1,40 @@
+[project]
+name = "betty-ai-bot"
+version = "0.1.0"
+description = "Telegram-бот с AI-прогнозами на киберспорт"
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "aiogram>=3.31,<4",
+    "beautifulsoup4>=4.13,<5",
+    "httpx>=0.28,<0.29",
+    "playwright>=1.55,<2",
+    "protego>=0.4,<1",
+    "pydantic-settings>=2,<3",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8,<10",
+    "pytest-asyncio>=1,<2",
+    "ruff>=0.12,<1",
+]
+
+[tool.uv]
+# Каркас приложения: сборка и установка собственного пакета пока не нужны.
+package = false
+python-preference = "only-managed"
+
+[tool.ruff]
+target-version = "py313"
+line-length = 120
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
