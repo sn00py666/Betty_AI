@@ -1,6 +1,5 @@
 x-common: &common
   image: betty-ai:local
-  build: .
   init: true
   restart: unless-stopped
   read_only: true
@@ -23,6 +22,7 @@ x-common: &common
 services:
   bot:
     <<: *common
+    build: .
     env_file: .env
     mem_limit: 512m
     cpus: 0.3
