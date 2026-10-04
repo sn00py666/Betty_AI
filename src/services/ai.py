@@ -48,7 +48,11 @@ def facts(match):
         "market_probability_team1": market_probability(match),
         "offers": [{k: o[k] for k in ("bookmaker", "p1", "p2")} for o in match["offers"]],
         "statistics": {
-            side: {k: v for k, v in stats.items() if k != "recent"}
+            side: {
+                k: v
+                for k, v in stats.items()
+                if k != "recent" and (not k.startswith("tournament_") or stats.get("tournament_games"))
+            }
             for side, stats in (match.get("statistics") or {}).items()
             if side in ("team1", "team2")
         },

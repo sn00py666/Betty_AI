@@ -28,7 +28,7 @@ def statistics_text(match):
     tournament = []
     for side in ("team1", "team2"):
         form = stats[side]
-        if form["tournament_games"] is not None:
+        if form["tournament_games"]:
             tournament.append(f"{escape(match[side])} — побед {form['tournament_wins']} из {form['tournament_games']}")
     if tournament:
         meetings += " На текущем этапе турнира: " + "; ".join(tournament) + "."
@@ -41,6 +41,8 @@ def render(match, commentary=None):
     probability = market_probability(match)
     if match.get("statistics"):
         lines.append("\n" + statistics_text(match))
+    else:
+        lines.append("\n<b>Оценка по текущим коэффициентам</b>")
     if commentary:
         lines.append("\n" + escape(commentary.summary))
     elif probability is None:
@@ -66,8 +68,6 @@ def render(match, commentary=None):
     if statistics:
         updated = datetime.fromtimestamp(statistics["updated_at"], UTC).astimezone(MOSCOW).strftime("%d.%m %H:%M")
         lines.append(f"\n<i>Статистика: PandaScore, {updated} МСК. Изменения составов не проверены.</i>")
-    else:
-        lines.append("\n<i>Основа разбора — котировки. Статистика команд недоступна.</i>")
     lines.append("\n<i>Не является финансовым советом. 18+</i>")
     return "\n".join(lines)
 

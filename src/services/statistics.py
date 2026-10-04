@@ -148,7 +148,12 @@ class Statistics:
         upcoming = await self.get(f"/{game}/matches/upcoming", 3600)
         if not upcoming:
             return None
-        teams = {t["id"]: t for r in upcoming["rows"] for t in r["teams"]}
+        sport = "cs-go" if match["sport"] == "cs2" else "dota-2"
+        # Команды из уже загруженной истории тоже подходят: дополнительных поисковых запросов нет.
+        known = [
+            row for entry in self.state.get("cache", {}).values() for row in entry["rows"] if row["sport"] == sport
+        ]
+        teams = {t["id"]: t for r in [*known, *upcoming["rows"]] for t in r["teams"]}
         selected = [
             [t for t in teams.values() if team_key(t["name"]) == team_key(match[side])] for side in ("team1", "team2")
         ]
@@ -172,7 +177,6 @@ class Statistics:
             return None
         now = datetime.now(UTC)
         cutoff = now - timedelta(days=180)
-        sport = "cs-go" if match["sport"] == "cs2" else "dota-2"
         rows = [[r for r in h["rows"] if r["sport"] == sport] for h in histories]
         tournament_id = event["tournament_id"] if event else None
         summaries = [

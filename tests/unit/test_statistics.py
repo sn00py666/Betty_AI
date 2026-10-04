@@ -50,6 +50,12 @@ async def test_cache_shared_across_matches_and_restarts(tmp_path, monkeypatch):
     assert get.await_count == 3
     again = await Statistics(config(), path).describe(match(now))
     assert again == result and get.await_count == 3
+    # Команды пропали из расписания, но их ID остались в ранее загруженной истории.
+    cache = Statistics(config(), path)
+    cache.state["cache"]["/csgo/matches/upcoming"]["rows"] = []
+    cache.save()
+    assert await Statistics(config(), path).describe(match(now)) is not None
+    assert get.await_count == 3
     # Один просроченный ответ обновляется, остальные переиспользуются.
     cache = Statistics(config(), path)
     cache.state["cache"]["/teams/1/matches"]["fetched_at"] -= 7 * 3600
