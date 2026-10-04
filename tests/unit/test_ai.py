@@ -29,7 +29,7 @@ def settings():
 
 
 async def test_cache_reused_after_restart_and_refresh(tmp_path, monkeypatch, match):
-    answer = json.dumps(dict(summary="Рынок выделяет Spirit.", risk="В этом разборе нет статистики формы."))
+    answer = json.dumps(dict(summary="Рынок выделяет Spirit."))
     post = AsyncMock(
         return_value=httpx.Response(
             200,

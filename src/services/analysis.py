@@ -20,7 +20,8 @@ def render(match, commentary=None):
         lines.append(f"<b>Фаворит по коэффициентам:</b> {favorite} · около {chance:.0%}.")
     lines.append("Это оценка из коэффициентов без маржи, не независимый AI-прогноз и не гарантия результата.")
     if commentary:
-        lines.extend(["\n<b>Комментарий AI</b>", escape(commentary.summary), escape(commentary.risk)])
+        lines.extend(["\n<b>Комментарий AI</b>", escape(commentary.summary)])
+        lines.append("В этом разборе нет статистики формы, составов и личных встреч. Даже фаворит может проиграть.")
     else:
         lines.append("AI-комментарий сейчас недоступен; ниже — проверяемое сравнение котировок.")
     lines.append("\n<b>Коэффициенты на победителя матча</b>")
