@@ -1,14 +1,14 @@
 import asyncio
-from html import escape
 
 from aiogram import F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, CommandStart
 from aiogram.types import CallbackQuery, Message
 
 import content
 from keyboards import menu
 from services.ai import Analyst, facts
-from services.analysis import render
+from services.analysis import render, render_offers
 from services.matches import Matches, date
 from services.users import Users
 
@@ -17,7 +17,7 @@ router.message.filter(F.chat.type == "private")
 router.callback_query.filter(F.message.chat.type == "private")
 
 
-async def show_matches(message, user_id, users, matches, page=0):
+async def show_matches(message, user_id, users, matches, page=0, edit=False):
     sport = users.get(user_id).get("sport")
     if sport not in content.SPORTS:
         await message.answer("<b>Выбери дисциплину:</b>", reply_markup=menu.disciplines())
@@ -26,17 +26,20 @@ async def show_matches(message, user_id, users, matches, page=0):
     page = min(max(0, page), max(0, (len(items) - 1) // menu.PAGE_SIZE))
     text = content.MATCH_LIST if items else "Свежих матчей этой дисциплины сейчас нет. Попробуй позже."
     if items:
-        text += f"\n\n{content.SPORTS[sport]} · матчей: {len(items)} · страница {page + 1}"
-    await message.answer(text, reply_markup=menu.matches(items, sport, page))
+        text += f"\n\n<i>Время МСК · {page + 1}/{(len(items) - 1) // menu.PAGE_SIZE + 1}</i>"
+    markup = menu.matches(items, sport, page)
+    if edit:
+        try:
+            await message.edit_text(text, reply_markup=markup)
+        except TelegramBadRequest as error:
+            if "message is not modified" not in error.message.lower():
+                raise
+    else:
+        await message.answer(text, reply_markup=markup)
 
 
 async def show_offers(message, match):
-    await message.answer(
-        f"<b>{escape(match['team1'])} vs {escape(match['team2'])}</b>\n\n"
-        "Выбирай букмекера по коэффициентам 👇\nП1 — первая команда, П2 — вторая.\n"
-        "Условия и текущую цену проверяй на сайте букмекера.",
-        reply_markup=menu.offers(match),
-    )
+    await message.answer(render_offers(match), reply_markup=menu.offers(match))
 
 
 @router.message(CommandStart())
@@ -89,7 +92,7 @@ async def change_page(callback: CallbackQuery, users: Users, matches: Matches):
         return
     await callback.answer()
     users.update(callback.from_user.id, sport=parts[1])
-    await show_matches(callback.message, callback.from_user.id, users, matches, int(parts[2]))
+    await show_matches(callback.message, callback.from_user.id, users, matches, int(parts[2]), edit=True)
 
 
 @router.callback_query(F.data.startswith("match:"))
@@ -111,6 +114,7 @@ async def open_match(callback: CallbackQuery, users: Users, matches: Matches, an
     if fresh is None:
         await pending.edit_text("За время разбора котировки устарели. Обнови список матчей.")
         return
+    fresh["statistics"] = match.get("statistics")
     if facts(fresh) != facts(match):
         commentary = None
     await pending.edit_text(render(fresh, commentary), reply_markup=menu.match_actions(fresh))

@@ -62,7 +62,7 @@ async def test_provider_error_falls_back_and_backs_off(tmp_path, monkeypatch, ma
     assert await analyst.explain(match) is None
     assert await analyst.explain(match) is None
     assert post.await_count == 1
-    assert "AI-комментарий сейчас недоступен" in render(match)
+    assert "AI-разбор сейчас недоступен" in render(match)
 
 
 async def test_daily_request_limit_persists(tmp_path, monkeypatch, match):

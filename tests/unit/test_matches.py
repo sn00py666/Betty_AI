@@ -88,3 +88,26 @@ def test_per_match_expiry_preserves_prematch_in_mixed_snapshot(tmp_path):
     data["expires_at"] = (NOW + timedelta(seconds=60)).isoformat()
     (tmp_path / "pari" / "latest.json").write_text(json.dumps(data))
     assert len(Matches(tmp_path).read(NOW + timedelta(minutes=5))) == 1
+
+
+def test_dates_use_moscow_day_at_utc_midnight_boundary():
+    from services.matches import start_label
+
+    now = datetime(2026, 10, 4, 22, tzinfo=UTC)  # Уже 5 октября в Москве.
+    match = dict(status="prematch", starts_at="2026-10-04T23:00:00+00:00")
+    assert start_label(match, now) == "сегодня 02:00"
+    match["starts_at"] = "2026-10-05T23:00:00+00:00"
+    assert start_label(match, now) == "завтра 02:00"
+
+
+def test_chronological_order_puts_unknown_times_last(tmp_path):
+    data = snapshot(tmp_path, "pari")
+    original = data["matches"][0]
+    data["matches"] = [
+        dict(original, id="late", starts_at=(NOW + timedelta(hours=3)).isoformat()),
+        dict(original, id="unknown", starts_at=None),
+        dict(original, id="early", starts_at=(NOW + timedelta(hours=1)).isoformat()),
+    ]
+    (tmp_path / "pari" / "latest.json").write_text(json.dumps(data))
+    rows = Matches(tmp_path).read(NOW)
+    assert [r["starts_at"] for r in rows] == [data["matches"][i]["starts_at"] for i in (2, 0, 1)]

@@ -3,7 +3,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from content import SPORTS
 from services.matches import BOOKMAKERS, start_label
 
-PAGE_SIZE = 8
+PAGE_SIZE = 5
 
 
 def keyboard(buttons):
@@ -18,14 +18,19 @@ def disciplines():
 
 def matches(items, sport, page):
     buttons = [
-        (f"{m['team1']} — {m['team2']} · {start_label(m)}"[:110], f"match:{m['id']}")
+        (f"{m['team1']} vs {m['team2']} · {start_label(m)}"[:110], f"match:{m['id']}")
         for m in items[page * PAGE_SIZE : (page + 1) * PAGE_SIZE]
     ]
+    markup = keyboard(buttons)
+    arrows = []
     if page:
-        buttons.append(("← Предыдущие", f"page:{sport}:{page - 1}"))
+        arrows.append(InlineKeyboardButton(text="←", callback_data=f"page:{sport}:{page - 1}"))
     if (page + 1) * PAGE_SIZE < len(items):
-        buttons.append(("Следующие →", f"page:{sport}:{page + 1}"))
-    return keyboard([*buttons, ("Обновить список", f"page:{sport}:{page}"), ("назад", "disciplines")])
+        arrows.append(InlineKeyboardButton(text="→", callback_data=f"page:{sport}:{page + 1}"))
+    if arrows:
+        markup.inline_keyboard.append(arrows)
+    markup.inline_keyboard.extend(keyboard([("назад", "disciplines")]).inline_keyboard)
+    return markup
 
 
 def navigation():

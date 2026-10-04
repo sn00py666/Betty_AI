@@ -15,6 +15,9 @@ class Settings(BaseSettings):
         hide_input_in_errors=True,
     )
 
+    pandascore_api_key: SecretStr | None = None
+    pandascore_daily_limit: int = Field(default=100, ge=0)
+
     ai_api_key: SecretStr | None = None
     ai_base_url: str = "https://openrouter.ai/api/v1"
     ai_daily_limit: int = Field(default=500, ge=0)

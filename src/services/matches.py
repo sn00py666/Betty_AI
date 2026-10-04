@@ -61,11 +61,17 @@ def compatible(left, right):
     return False
 
 
-def start_label(match):
+def start_label(match, now=None):
     if match["status"] == "live":
         return "LIVE"
     start = date(match.get("starts_at"))
-    return start.astimezone(MOSCOW).strftime("%d.%m %H:%M МСК") if start else "время уточняется"
+    if start is None:
+        return "время уточняется"
+    start = start.astimezone(MOSCOW)
+    today = (now or datetime.now(UTC)).astimezone(MOSCOW).date()
+    days = (start.date() - today).days
+    day = {0: "сегодня", 1: "завтра"}.get(days, start.strftime("%d.%m"))
+    return f"{day} {start:%H:%M}"
 
 
 def market_probability(match):
@@ -144,7 +150,7 @@ class Matches:
                     "fetched_at": row["fetched_at"],
                 }
             )
-        return sorted(groups, key=lambda m: (m["status"] != "live", m.get("starts_at") or "9999", m["team1"]))
+        return sorted(groups, key=lambda m: (date(m.get("starts_at")) or datetime.max.replace(tzinfo=UTC), m["team1"]))
 
     def get(self, match_id):
         return next((match for match in self.read() if match["id"] == match_id), None)
