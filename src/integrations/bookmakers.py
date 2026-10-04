@@ -113,6 +113,10 @@ def parse_marathon(text, captured_at=None, url=None):
                     )
             path = "/su/betting/" + row["data-event-path"]
             label = row.select_one(".date")
+            start_label = label.get_text(" ", strip=True) if label else None
+            dated_label = start_label
+            if start_label and re.fullmatch(r"\d{1,2}:\d{2}", start_label) and row.select_one(".today-member-name"):
+                dated_label = "сегодня " + start_label
             best_of = re.search(r"из ([135])", tournament)
             matches.append(
                 {
@@ -122,9 +126,8 @@ def parse_marathon(text, captured_at=None, url=None):
                     "tournament": tournament,
                     "best_of": int(best_of[1]) if best_of else (1 if "одной карты" in tournament else None),
                     "sport": "dota2" if "dota" in tournament.lower() else "cs2",
-                    "starts_at": dates.get(path)
-                    or (start_time(label.get_text(" ", strip=True), captured_at, zone[1]) if label and zone else None),
-                    "start_label": label.get_text(" ", strip=True) if label else None,
+                    "starts_at": dates.get(path) or (start_time(dated_label, captured_at, zone[1]) if zone else None),
+                    "start_label": start_label,
                     "market": "match_winner",
                     "status": "prematch",
                     "p1": odds.get("1"),

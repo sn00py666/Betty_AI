@@ -273,3 +273,15 @@ def test_dota_series_is_included_but_draw_market_is_excluded():
     assert match["sport"] == "dota2" and match["best_of"] == 3
     data["customFactors"][0]["factors"].append({"f": 922, "v": 3})
     assert parse_fonbet(json.dumps(data)) == []
+
+
+def test_marathon_today_after_moscow_midnight():
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup((FIXTURES / "marathon.html").read_text(), "html.parser")
+    row = soup.select_one('[data-event-name][data-live="false"]')
+    row.select_one(".date").string = "14:30"
+    row.select_one(".member-name")["class"].append("today-member-name")
+    html = '<script>initData={"timeZoneId":"Europe/Moscow"}</script>' + str(soup)
+    match = parse_marathon(html, "2026-10-04T22:00:00+00:00")[0]
+    assert match["starts_at"] == "2026-10-05T11:30:00+00:00"
