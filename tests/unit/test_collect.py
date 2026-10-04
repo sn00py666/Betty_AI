@@ -285,3 +285,11 @@ def test_marathon_today_after_moscow_midnight():
     html = '<script>initData={"timeZoneId":"Europe/Moscow"}</script>' + str(soup)
     match = parse_marathon(html, "2026-10-04T22:00:00+00:00")[0]
     assert match["starts_at"] == "2026-10-05T11:30:00+00:00"
+
+
+def test_draw_market_is_excluded_even_when_draw_is_blocked():
+    data = json.loads((FIXTURES / "fonbet.json").read_text())
+    target = parse_fonbet(json.dumps(data))[0]["id"]
+    market = next(f for f in data["customFactors"] if str(f["e"]) == target)
+    market["factors"].append({"f": 922, "v": 3.2, "blocked": True})
+    assert target not in {m["id"] for m in parse_fonbet(json.dumps(data))}

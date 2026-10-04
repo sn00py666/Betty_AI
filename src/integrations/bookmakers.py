@@ -52,7 +52,7 @@ def parse_fonbet(text, bookmaker="fonbet"):
         tournament = tournaments[event["sportId"]]
         best_of = re.search(r"\bBo([135])\b", tournament, re.IGNORECASE)
         sport = "dota2" if tournament.startswith("Dota 2.") else "cs2"
-        if sport == "dota2" and (not best_of or 922 in odds):
+        if any(f["f"] == 922 for f in market.get("factors", [])) or (sport == "dota2" and not best_of):
             continue  # Не сравниваем двухисходный рынок с BO2/ничьей.
         matches.append(
             {
