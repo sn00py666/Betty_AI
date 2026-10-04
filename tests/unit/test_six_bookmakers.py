@@ -47,3 +47,31 @@ def test_browser_snapshots_deduplicate_and_keep_capture_time():
     rows = parse_response("betboom", json.dumps({"pages": [page, newer]}))
     assert len(rows) == 1
     assert rows[0]["fetched_at"] == newer["captured_at"]
+
+
+def test_betboom_sticky_heading_cannot_change_tournament():
+    from bs4 import BeautifulSoup
+
+    captured = json.loads((FIXTURES / "captured.json").read_text())["betboom"]
+    html = (FIXTURES / "betboom.html").read_text()
+    scrolled = BeautifulSoup(html, "html.parser")
+    scrolled.select_one("h3.bb-Ls").decompose()
+    sticky = '<div class="bb-Ny"><h3 class="bb-Ls">Другой турнир</h3></div>'
+    pages = [
+        dict(url=SOURCES["betboom"], captured_at=captured, html=html),
+        dict(url=SOURCES["betboom"], captured_at=captured, html=sticky + str(scrolled)),
+    ]
+    rows = parse_response("betboom", json.dumps({"pages": pages}))
+    assert len(rows) == 1
+    assert rows[0]["tournament"] == "BLAST SLAM VIII"
+
+
+def test_betboom_outright_is_not_a_match():
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup((FIXTURES / "betboom.html").read_text(), "html.parser")
+    teams = soup.select(".bb-yO")
+    teams[0].string = "Итоги BLAST SLAM VIII"
+    teams[1].decompose()
+    rows = parse_response("betboom", str(soup), "2026-10-04T23:00:00+00:00")
+    assert rows == []

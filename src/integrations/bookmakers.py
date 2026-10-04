@@ -248,13 +248,20 @@ def parse_betboom(text, captured_at=None, url=None):
     selected = soup.select_one('[role="radio"][aria-label="Исход"][aria-checked="true"]')
     if not heading or heading.get_text(strip=True) not in ("CS2", "Dota 2") or not selected:
         raise ValueError("BetBoom: не найдена линия CS2 / Dota 2 с выбранным рынком «Исход»")
+    # При прокрутке закреплённый заголовок относится к видимой области, а не к первым DOM-карточкам.
+    for sticky in soup.select(".bb-Ny"):
+        sticky.decompose()
     matches = {}
     for toggle in soup.select('[id^="match-markets-toggle-"]'):
         card = toggle.find_parent(class_="bb-nU")
         teams = card.select(".bb-yO") if card else []
         title = card.find_previous("h3", class_="bb-Ls") if card else None
-        if len(teams) != 2 or not title:
-            raise ValueError("BetBoom: изменилась разметка команд или турнира")
+        if len(teams) == 1 and teams[0].get_text(strip=True).startswith("Итоги "):
+            continue  # Победитель турнира, не отдельного матча.
+        if len(teams) != 2:
+            raise ValueError("BetBoom: изменилась разметка команд")
+        if not title:
+            continue  # Заголовок уже ушёл из виртуального DOM; карточка есть в предыдущем снимке.
         if re.search(r"1x1|дуэл", title.get_text(" ", strip=True), re.I):
             continue
         odds = {}
