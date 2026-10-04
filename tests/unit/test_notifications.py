@@ -30,3 +30,26 @@ def test_daily_is_dated_and_does_not_replay_after_restart():
     message = list(scheduled(user, [event(now)], now))[0]
     assert message[0] == "2026-10-04:12"
     assert list(scheduled(user, [event(now)], now + timedelta(minutes=11))) == []
+
+
+async def test_delivery_is_not_repeated_after_restart(tmp_path, monkeypatch):
+    import asyncio
+    from unittest.mock import AsyncMock, Mock
+
+    import pytest
+
+    from services import notifications
+    from services.users import Users
+
+    now = datetime(2026, 10, 4, 9, tzinfo=UTC)
+    monkeypatch.setattr(notifications, "datetime", Mock(now=Mock(return_value=now)))
+    monkeypatch.setattr(notifications.asyncio, "sleep", AsyncMock(side_effect=asyncio.CancelledError))
+    users = Users(tmp_path / "users.json")
+    users.update(42, notifications=True, sport="cs2")
+    bot = Mock(send_message=AsyncMock())
+    matches = Mock(read=Mock(return_value=[event(now)]))
+    with pytest.raises(asyncio.CancelledError):
+        await notifications.run(bot, users, matches)
+    with pytest.raises(asyncio.CancelledError):
+        await notifications.run(bot, Users(users.path), matches)
+    bot.send_message.assert_awaited_once()
