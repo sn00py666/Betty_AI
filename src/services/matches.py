@@ -28,6 +28,26 @@ ALIASES = {
     "natusvincere": "navi",
     "nemigagaming": "nemiga",
     "bbteam": "betboomteam",
+    "pvision": "parivision",
+    "teamyandex": "yandex",
+    "lgdgaming": "lgd",
+    "teamsynapse": "synapse",
+    "legiongaming": "legion",
+    "teamaurora": "aurora",
+    "furiaesports": "furia",
+    "teamvitality": "vitality",
+    "teamfalcons": "falcons",
+    "auroragaming": "aurora",
+    "1w": "1win",
+    "1wteam": "1win",
+    "9zteam": "9z",
+    "ctrlesports": "ctrl",
+    "sangalesports": "sangal",
+    "apogeeesports": "apogee",
+    "sashiesport": "sashi",
+    "teamliquid": "liquid",
+    "innercircleesports": "innercircle",
+    "famalicaoesports": "famalicao",
 }
 logger = logging.getLogger(__name__)
 
@@ -100,7 +120,10 @@ class Matches:
                     status = raw.get("status")
                     if status not in ("live", "prematch"):
                         continue
-                    age = (now - fetched).total_seconds()
+                    observed = date(raw.get("fetched_at")) or fetched
+                    if observed > now:
+                        continue
+                    age = (now - observed).total_seconds()
                     if age > (60 if status == "live" else 1800):
                         continue
                     start = date(raw.get("starts_at"))
@@ -119,7 +142,7 @@ class Matches:
                             "bookmaker": bookmaker,
                             "sport": raw.get("sport", "cs2"),
                             "teams": [team_key(raw["team1"]), team_key(raw["team2"])],
-                            "fetched_at": fetched.isoformat(),
+                            "fetched_at": observed.isoformat(),
                             "p1": price(raw.get("p1")),
                             "p2": price(raw.get("p2")),
                         }

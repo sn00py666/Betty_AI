@@ -46,7 +46,7 @@ async def test_browser_failure_uses_persistent_cooldown(tmp_path, monkeypatch, c
     save_json(folder / "state.json", {"robots": "User-agent: *\nAllow: /", "robots_checked": time.time()})
     calls = []
 
-    async def browser(url):
+    async def browser(url, robots=""):
         calls.append(url)
         return httpx.Response(code, headers={"Retry-After": "7200"}, request=httpx.Request("GET", url)), ""
 
@@ -197,7 +197,7 @@ def test_leon_series_market_and_locked_prices():
     assert match["id"] == "1970324853713054"
     assert parse_leon(html.replace('locked="false"', 'locked="true"'))[0]["p1"] is None
     assert parse_leon(html.replace("Победитель", "Победитель 1 карты"))[0]["p1"] is None
-    assert parse_leon(html.replace("/bets/esports/cs2/", "/bets/esports/dota-2/")) == []
+    assert parse_leon(html.replace("/bets/esports/cs2/", "/bets/esports/dota-2/"))[0]["sport"] == "dota2"
     live = parse_leon(html.replace('live="false"', 'live="true"'))[0]
     assert live["status"] == "live" and live["start_label"] is None
 
@@ -211,9 +211,9 @@ def test_betboom_primary_market_only_and_disabled_prices():
     assert parse_betboom(html.replace("<button ", "<button disabled "))[0]["p1"] is None
     extra = '<button><span class="bb-Uu">П1</span><span class="bb-Vu">9.99</span></button>'
     assert parse_betboom(html + extra)[0]["p1"] == 3.6
-    for wrong in (html.replace("CS2", "Dota 2"), html.replace('aria-checked="true"', 'aria-checked="false"')):
-        with pytest.raises(ValueError):
-            parse_betboom(wrong)
+    assert parse_betboom(html.replace("CS2", "Dota 2"))[0]["sport"] == "dota2"
+    with pytest.raises(ValueError):
+        parse_betboom(html.replace('aria-checked="true"', 'aria-checked="false"'))
 
 
 @pytest.mark.parametrize("name", ["leon", "betboom"])

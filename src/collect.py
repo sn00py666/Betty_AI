@@ -16,8 +16,8 @@ from urllib.parse import urlsplit
 import httpx
 from protego import Protego
 
-from integrations.bookmakers import PARSERS, SOURCES
-from integrations.browser import load_rendered, load_winline
+from integrations.bookmakers import SOURCES, parse_response
+from integrations.browser import BROWSER_URLS, load_rendered, load_winline
 
 DATA = Path(__file__).resolve().parent.parent / "data" / "odds"
 # Профиль Chrome 154 на macOS (версия установленного Chrome при настройке).
@@ -110,7 +110,7 @@ async def collect_one(name, client, directory=DATA):
             # Пауза между robots.txt и линией того же сервера.
             await asyncio.sleep(max(10, Protego.parse(rules).crawl_delay(ROBOTS_AGENT) or 0))
         rules = Protego.parse(state.get("robots", ""))
-        if not rules.can_fetch(url, ROBOTS_AGENT):
+        if any(not rules.can_fetch(address, ROBOTS_AGENT) for address in BROWSER_URLS.get(name, [url])):
             raise StopSource("robots.txt запрещает этот адрес")
         state["next_request"] = max(state["next_request"], time.time() + (rules.crawl_delay(ROBOTS_AGENT) or 0))
         save_json(state_path, state)
@@ -128,7 +128,7 @@ async def collect_one(name, client, directory=DATA):
         if rendered:
             pass  # Линия уже загружена вместе с robots.txt в одном браузерном сеансе.
         elif name == "winline":
-            response, text = await load_winline(url)
+            response, text = await load_winline(url, state.get("robots", ""))
             if response.status_code in (401, 403, 451):
                 raise StopSource(f"HTTP {response.status_code}: доступ ограничен")
             response.raise_for_status()
@@ -138,7 +138,7 @@ async def collect_one(name, client, directory=DATA):
             if not raw_path.exists():
                 raise StopSource("HTTP 304 без локального ответа")
             text = gzip.decompress(raw_path.read_bytes()).decode()
-        matches = PARSERS[name](text)
+        matches = parse_response(name, text, datetime.now(UTC).isoformat())
         # Пустой список после непустого может означать изменение формата, а не исчезновение линии.
         if not matches:
             raise StopSource("Нет подходящих матчей: требуется проверить источник; старый снимок не обновлён")
@@ -150,7 +150,9 @@ async def collect_one(name, client, directory=DATA):
             {
                 **match,
                 "expires_at": datetime.fromtimestamp(
-                    fetched + (60 if match["status"] == "live" else INTERVAL), UTC
+                    (datetime.fromisoformat(match["fetched_at"]).timestamp() if match.get("fetched_at") else fetched)
+                    + (60 if match["status"] == "live" else INTERVAL),
+                    UTC,
                 ).isoformat(),
             }
             for match in matches
@@ -163,7 +165,8 @@ async def collect_one(name, client, directory=DATA):
             ).isoformat(),
             "matches": timed_matches,
         }
-        digest = hashlib.sha256(json.dumps(matches, sort_keys=True).encode()).hexdigest()
+        content = [{k: v for k, v in match.items() if k != "fetched_at"} for match in matches]
+        digest = hashlib.sha256(json.dumps(content, sort_keys=True).encode()).hexdigest()
         if digest != state.get("digest"):
             with (folder / "history.jsonl").open("a") as history:
                 history.write(json.dumps(snapshot, ensure_ascii=False) + "\n")

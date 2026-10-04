@@ -111,3 +111,14 @@ def test_chronological_order_puts_unknown_times_last(tmp_path):
     (tmp_path / "pari" / "latest.json").write_text(json.dumps(data))
     rows = Matches(tmp_path).read(NOW)
     assert [r["starts_at"] for r in rows] == [data["matches"][i]["starts_at"] for i in (2, 0, 1)]
+
+
+def test_browser_capture_time_is_not_extended_by_later_pages(tmp_path):
+    snapshot(
+        tmp_path,
+        "pari",
+        status="live",
+        fetched_at=(NOW - timedelta(seconds=61)).isoformat(),
+        expires_at=(NOW + timedelta(seconds=60)).isoformat(),
+    )
+    assert Matches(tmp_path).read(NOW) == []
