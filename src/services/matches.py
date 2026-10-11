@@ -3,7 +3,6 @@
 import hashlib
 import json
 import logging
-import re
 from datetime import UTC, datetime
 from pathlib import Path
 from statistics import median
@@ -11,6 +10,7 @@ from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 from integrations.bookmakers import SOURCES, price
+from services.team_names import canonical_name, team_key
 
 MOSCOW = ZoneInfo("Europe/Moscow")
 BOOKMAKERS = {
@@ -21,40 +21,7 @@ BOOKMAKERS = {
     "leon": "Леон",
     "betboom": "BetBoom",
 }
-# Только известные варианты, без нечёткого сравнения и удаления Academy/Youngsters.
-ALIASES = {
-    "teamspirit": "spirit",
-    "g2esports": "g2",
-    "natusvincere": "navi",
-    "nemigagaming": "nemiga",
-    "bbteam": "betboomteam",
-    "pvision": "parivision",
-    "teamyandex": "yandex",
-    "lgdgaming": "lgd",
-    "teamsynapse": "synapse",
-    "legiongaming": "legion",
-    "teamaurora": "aurora",
-    "furiaesports": "furia",
-    "teamvitality": "vitality",
-    "teamfalcons": "falcons",
-    "auroragaming": "aurora",
-    "1w": "1win",
-    "1wteam": "1win",
-    "9zteam": "9z",
-    "ctrlesports": "ctrl",
-    "sangalesports": "sangal",
-    "apogeeesports": "apogee",
-    "sashiesport": "sashi",
-    "teamliquid": "liquid",
-    "innercircleesports": "innercircle",
-    "famalicaoesports": "famalicao",
-}
 logger = logging.getLogger(__name__)
-
-
-def team_key(name):
-    key = re.sub(r"[^\w]", "", name.casefold())
-    return ALIASES.get(key, key)
 
 
 def date(value):
@@ -139,6 +106,8 @@ class Matches:
                     rows.append(
                         {
                             **raw,
+                            "team1": canonical_name(raw["team1"], raw.get("sport", "cs2")),
+                            "team2": canonical_name(raw["team2"], raw.get("sport", "cs2")),
                             "bookmaker": bookmaker,
                             "sport": raw.get("sport", "cs2"),
                             "teams": [team_key(raw["team1"]), team_key(raw["team2"])],
@@ -173,7 +142,11 @@ class Matches:
                     "fetched_at": row["fetched_at"],
                 }
             )
-        return sorted(groups, key=lambda m: (date(m.get("starts_at")) or datetime.max.replace(tzinfo=UTC), m["team1"]))
+        return sorted(groups, key=match_order)
 
     def get(self, match_id):
         return next((match for match in self.read() if match["id"] == match_id), None)
+
+
+def match_order(match):
+    return (match["status"] != "live", date(match.get("starts_at")) or datetime.max.replace(tzinfo=UTC), match["team1"])

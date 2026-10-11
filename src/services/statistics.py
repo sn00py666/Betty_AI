@@ -31,7 +31,7 @@ def compact(row):
         )
     } | {
         "teams": [
-            dict(id=o["opponent"]["id"], name=o["opponent"]["name"])
+            dict(id=o["opponent"]["id"], name=o["opponent"]["name"], country=o["opponent"].get("location"))
             for o in row.get("opponents", [])
             if o.get("opponent")
         ],
@@ -201,8 +201,8 @@ class Statistics:
         return {
             "source": "PandaScore",
             "updated_at": min(h["fetched_at"] for h in histories),
-            "team1": summaries[0],
-            "team2": summaries[1],
+            "team1": summaries[0] | {"country": first.get("country")},
+            "team2": summaries[1] | {"country": second.get("country")},
             "head_to_head": {
                 "games": len(h2h),
                 "team1_wins": sum(r["winner_id"] == first["id"] for r in h2h.values()),

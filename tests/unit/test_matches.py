@@ -122,3 +122,54 @@ def test_browser_capture_time_is_not_extended_by_later_pages(tmp_path):
         expires_at=(NOW + timedelta(seconds=60)).isoformat(),
     )
     assert Matches(tmp_path).read(NOW) == []
+
+
+def test_live_matches_precede_earlier_upcoming_and_unknown_times(tmp_path):
+    data = snapshot(tmp_path, "pari")
+    base = data["matches"][0]
+    data["matches"] = [
+        dict(base, id="upcoming", starts_at=(NOW + timedelta(hours=1)).isoformat()),
+        dict(base, id="live-unknown", status="live", starts_at=None),
+        dict(base, id="live-later", status="live", starts_at=(NOW + timedelta(hours=2)).isoformat()),
+        dict(base, id="live-earlier", status="live", starts_at=(NOW - timedelta(hours=1)).isoformat()),
+    ]
+    (tmp_path / "pari" / "latest.json").write_text(json.dumps(data))
+    rows = Matches(tmp_path).read(NOW)
+    assert [r["status"] for r in rows] == ["live", "live", "live", "prematch"]
+    assert [r["starts_at"] for r in rows] == [data["matches"][i]["starts_at"] for i in (3, 2, 1, 0)]
+
+
+def test_hltv_names_normalized_before_merging_sources(tmp_path):
+    snapshot(tmp_path, "pari", team1="Ninjas in Pyjamas", team2="BB Team")
+    snapshot(tmp_path, "fonbet", team1="BETBOOM", team2="NIP", p1=1.6, p2=2.6, url="https://fon.bet/sports/10")
+    rows = Matches(tmp_path).read(NOW)
+    assert len(rows) == 1
+    assert (rows[0]["team1"], rows[0]["team2"]) == ("BETBOOM", "NIP")
+    assert [(o["p1"], o["p2"]) for o in rows[0]["offers"]] == [(1.6, 2.6), (1.5, 2.5)]
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("Natus Vincere", "NAVI"),
+        ("Ninja in Pyjamas", "NIP"),
+        ("Team Spirit", "Spirit"),
+        ("Team Falcons", "Falcons"),
+        ("Aurora Gaming", "Aurora"),
+        ("BB Team", "BETBOOM"),
+        ("BetBoom Team", "BETBOOM"),
+        ("TheMongolz", "The MongolZ"),
+        ("Virtus Pro", "Virtus.pro"),
+        ("Furia Esports", "FURIA"),
+        ("Faze Clan", "FaZe"),
+        ("Pain Gaming", "paiN"),
+        ("Famalicão", "Famalicão"),
+        ("Spirit Academy", "Spirit Academy"),
+        ("Unknown Academy", "Unknown Academy"),
+    ],
+)
+def test_reference_team_names(raw, expected):
+    from services.team_names import canonical_name
+
+    assert canonical_name(raw) == expected
+    assert canonical_name(raw, "dota2") == raw

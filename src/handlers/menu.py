@@ -9,7 +9,7 @@ import content
 from keyboards import menu
 from services.ai import Analyst, facts
 from services.analysis import render, render_offers
-from services.matches import Matches, date
+from services.matches import Matches, date, match_order
 from services.users import Users
 
 router = Router(name="menu")
@@ -22,7 +22,7 @@ async def show_matches(message, user_id, users, matches, page=0, edit=False):
     if sport not in content.SPORTS:
         await message.answer("<b>Выбери дисциплину:</b>", reply_markup=menu.disciplines())
         return
-    items = [m for m in matches.read() if m["sport"] == sport]
+    items = sorted((m for m in matches.read() if m["sport"] == sport), key=match_order)
     page = min(max(0, page), max(0, (len(items) - 1) // menu.PAGE_SIZE))
     text = content.MATCH_LIST if items else "Свежих матчей этой дисциплины сейчас нет. Попробуй позже."
     if items:
@@ -104,7 +104,7 @@ async def open_match(callback: CallbackQuery, users: Users, matches: Matches, an
         return
     await callback.answer()
     users.update(callback.from_user.id, last_match=match_id)
-    pending = await callback.message.answer("Разбираю текущие коэффициенты…")
+    pending = await callback.message.answer("Анализирую текущую форму команд…")
     try:
         async with asyncio.timeout(25):
             commentary = await analyst.explain(match)

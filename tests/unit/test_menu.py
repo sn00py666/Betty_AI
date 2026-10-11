@@ -116,7 +116,8 @@ async def test_real_analysis_then_actual_bookmaker_link(dispatcher, bot, users, 
     await dispatcher.feed_update(
         bot, incoming(callback="match:" + matches.read()[0]["id"]), users=users, matches=matches, analyst=analyst
     )
-    assert "Вероятный исход по текущей линии" in requests(bot, EditMessageText)[0].text
+    assert "Прогноз недоступен" in requests(bot, EditMessageText)[0].text
+    assert requests(bot, SendMessage)[0].text == "Анализирую текущую форму команд…"
     assert "80 000" not in requests(bot, EditMessageText)[0].text
     menu.asyncio.sleep.assert_awaited_once_with(3)
     offers = requests(bot, SendMessage)[-1]
@@ -165,3 +166,23 @@ async def test_pagination_has_five_matches_and_edits_same_message(dispatcher, bo
     rows = requests(bot, EditMessageText)[-1].reply_markup.inline_keyboard
     assert rows[0][0].callback_data == "match:10"
     assert [b.callback_data for b in rows[1]] == ["page:cs2:1"]
+
+
+async def test_live_matches_fill_first_pages_before_upcoming(dispatcher, bot, users, matches, monkeypatch):
+    users.update(42, sport="cs2")
+    base = matches.read()[0]
+    upcoming = [dict(base, id=f"prematch-{i}", status="prematch") for i in range(6)]
+    live = [dict(base, id=f"live-{i}", status="live", starts_at=None) for i in range(7)]
+    monkeypatch.setattr(matches, "read", lambda: [*upcoming, *live])
+    await dispatcher.feed_update(bot, incoming(callback="page:cs2:0"), users=users, matches=matches)
+    rows = requests(bot, EditMessageText)[-1].reply_markup.inline_keyboard
+    assert [r[0].callback_data for r in rows[:5]] == [f"match:live-{i}" for i in range(5)]
+    await dispatcher.feed_update(bot, incoming(callback="page:cs2:1"), users=users, matches=matches)
+    rows = requests(bot, EditMessageText)[-1].reply_markup.inline_keyboard
+    assert [r[0].callback_data for r in rows[:5]] == [
+        "match:live-5",
+        "match:live-6",
+        "match:prematch-0",
+        "match:prematch-1",
+        "match:prematch-2",
+    ]
