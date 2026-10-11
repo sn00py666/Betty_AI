@@ -13,6 +13,7 @@ import httpx
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from services.factors import factors
+from services.health import api_state
 from services.statistics import Statistics
 from services.team_names import canonical_match
 from services.users import Users
@@ -44,6 +45,8 @@ PROMPT = """Ты Betty, редактор коротких прогнозов н�
 Не придумывай рейтинг, раунды, карты, страну, мотивацию, стиль, составы или результаты.
 Не называй обычную форму формой против топ-10. unknown означает отсутствие данных,
 neutral — подтверждённый нейтральный фактор. Малое число личных встреч не доказывает перевес.
+Рейтинг Valve — отдельный рейтинг силы, его нельзя называть рейтингом HLTV.
+top10 с ranking=Valve VRS — матчи против топ-10 Valve на дату игры, а не топ-10 HLTV.
 games/wins — результаты максимум пяти последних матчей, а не всего сезона.
 recent_form — готовое сравнение последних результатов. Его edge=team1 или team2
 нельзя описывать как «равная/схожая форма»: укажи, чьи результаты лучше.
@@ -214,9 +217,18 @@ class Analyst:
                 temporary = self.path.with_suffix(".tmp")
                 temporary.write_text(json.dumps(self.cache, ensure_ascii=False))
                 temporary.replace(self.path)
+                api_state(self.path.parent / "health" / "ai.json", status=200)
                 return result
             except (httpx.HTTPError, ValidationError, ValueError, KeyError, IndexError, TypeError, OSError) as error:
                 self.retry_at = monotonic() + 60
                 self.cache.pop(key, None)
+                api_state(
+                    self.path.parent / "health" / "ai.json",
+                    error=f"HTTP {error.response.status_code}"
+                    if isinstance(error, httpx.HTTPStatusError)
+                    else type(error).__name__,
+                    status=error.response.status_code if isinstance(error, httpx.HTTPStatusError) else None,
+                    retry_at=datetime.now(UTC).timestamp() + 60,
+                )
                 logger.warning("AI-разбор недоступен (%s)", type(error).__name__)
                 return None

@@ -25,10 +25,19 @@ def factors(match):
         )
 
     top_a, top_b = first.get("top10", {}), second.get("top10", {})
+    rank_a, rank_b = first.get("valve_rank"), second.get("valve_rank")
+    if rank_a and rank_b and first.get("valve_date") == second.get("valve_date"):
+        add(
+            "Рейтинг Valve",
+            f"{a} — №{rank_a['rank']}, {b} — №{rank_b['rank']} ({first['valve_date']})",
+            rank_a["points"],
+            rank_b["points"],
+        )
     if top_a.get("games") and top_b.get("games"):
         add(
             "Форма против топов",
-            f"против топ-10: {a} — {top_a['wins']}/{top_a['games']}, {b} — {top_b['wins']}/{top_b['games']}",
+            f"против топ-10{' Valve' if top_a.get('ranking') == top_b.get('ranking') == 'Valve VRS' else ''}: "
+            f"{a} — {top_a['wins']}/{top_a['games']}, {b} — {top_b['wins']}/{top_b['games']}",
             top_a["wins"] / top_a["games"],
             top_b["wins"] / top_b["games"],
         )

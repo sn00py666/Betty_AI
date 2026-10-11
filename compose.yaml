@@ -28,7 +28,14 @@ services:
     cpus: 0.3
   collector:
     <<: *common
+    env_file: .env
     command: ["xvfb-run", "-a", "python", "src/collect.py", "--watch"]
     mem_limit: 2g
     shm_size: 256m
     cpus: 0.8
+  monitor:
+    <<: *common
+    env_file: .env
+    command: ["python", "src/monitor.py"]
+    mem_limit: 256m
+    cpus: 0.2

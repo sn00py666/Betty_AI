@@ -6,8 +6,10 @@ import fcntl
 import gzip
 import hashlib
 import json
+import os
 import random
 import time
+from contextlib import suppress
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from pathlib import Path
@@ -18,6 +20,8 @@ from protego import Protego
 
 from integrations.bookmakers import SOURCES, parse_response
 from integrations.browser import BROWSER_URLS, load_rendered, load_winline
+from services.health import heartbeat
+from services.rankings import run_rankings
 
 DATA = Path(__file__).resolve().parent.parent / "data" / "odds"
 # Профиль Chrome 154 на macOS (версия установленного Chrome при настройке).
@@ -91,6 +95,7 @@ async def collect_one(name, client, directory=DATA):
         return
     # Записываем ДО сети: авария или перезапуск не должны создавать частые запросы.
     state["next_request"] = now + INTERVAL + random.uniform(0, 60)
+    state["last_attempt"] = now
     save_json(state_path, state)
     url = SOURCES[name]
     try:
@@ -176,10 +181,11 @@ async def collect_one(name, client, directory=DATA):
             temporary.replace(raw_path)
             state.update(etag=response.headers.get("etag"), last_modified=response.headers.get("last-modified"))
         save_json(folder / "latest.json", snapshot)
-        state.update(digest=digest, failures=0, error=None)
+        state.update(digest=digest, failures=0, error=None, last_success=fetched, http_status=response.status_code)
         print(f"{name}: {len(matches)} матчей → {folder / 'latest.json'}")
     except httpx.HTTPStatusError as error:
         code = error.response.status_code
+        state["http_status"] = code
         if code == 429 or code >= 500:
             failures = state.get("failures", 0) + 1
             delay = min(86400, INTERVAL * 2 ** min(failures, 6))
@@ -189,18 +195,20 @@ async def collect_one(name, client, directory=DATA):
             state.update(paused=True, error=f"HTTP {code}: нужна ручная проверка")
         print(f"{name}: {state['error']}")
     except httpx.RequestError as error:
+        state["http_status"] = None
         failures = state.get("failures", 0) + 1
         state.update(failures=failures, next_request=time.time() + min(86400, INTERVAL * 2 ** min(failures, 6)))
         state["error"] = type(error).__name__
         print(f"{name}: ошибка сети, пауза увеличена")
     except (StopSource, ValueError, KeyError, TypeError, OverflowError) as error:
+        state["http_status"] = None
         state.update(paused=True, error=str(error))
         print(f"{name}: остановлен — {error}")
     finally:
         save_json(state_path, state)
 
 
-async def run(names, watch):
+async def collect_loop(names, watch):
     async with httpx.AsyncClient(
         timeout=30,
         follow_redirects=False,
@@ -212,6 +220,25 @@ async def run(names, watch):
             if not watch:
                 return
             await asyncio.sleep(60)
+
+
+async def run(names, watch):
+    tasks = [
+        asyncio.create_task(heartbeat(DATA.parent / "health" / "collector.json", sources=names)),
+        asyncio.create_task(collect_loop(names, watch)),
+    ]
+    if os.getenv("VALVE_RANKINGS_ENABLED", "true").lower() not in ("false", "0", "no"):
+        tasks.append(asyncio.create_task(run_rankings(DATA.parent / "valve.json")))
+    try:
+        done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        for task in done:
+            await task
+    finally:
+        for task in tasks:
+            task.cancel()
+        for task in tasks:
+            with suppress(asyncio.CancelledError):
+                await task
 
 
 def main():

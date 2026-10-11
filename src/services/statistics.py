@@ -10,7 +10,9 @@ from pathlib import Path
 
 import httpx
 
+from services.health import api_state
 from services.matches import date, team_key
+from services.rankings import ValveRankings
 
 logger = logging.getLogger(__name__)
 
@@ -133,10 +135,19 @@ class Statistics:
                 # Ограничиваем размер кеша; свежие популярные команды остаются.
                 self.state["cache"] = dict(sorted(cache.items(), key=lambda item: item[1]["fetched_at"])[-200:])
                 self.save()
+                api_state(self.path.parent / "health" / "pandascore.json", status=response.status_code)
                 return cache[route]
-            except (httpx.HTTPError, ValueError, KeyError, TypeError):
+            except (httpx.HTTPError, ValueError, KeyError, TypeError) as error:
                 self.state["retry_at"] = max(self.state.get("retry_at", 0), now + 300)
                 self.save()
+                api_state(
+                    self.path.parent / "health" / "pandascore.json",
+                    error=f"HTTP {error.response.status_code}"
+                    if isinstance(error, httpx.HTTPStatusError)
+                    else type(error).__name__,
+                    status=error.response.status_code if isinstance(error, httpx.HTTPStatusError) else None,
+                    retry_at=self.state["retry_at"],
+                )
                 logger.warning("Статистика PandaScore временно недоступна")
                 return None
 
@@ -185,6 +196,12 @@ class Statistics:
         ]
         if not all(s["games"] for s in summaries):
             return None
+        if self.settings.valve_rankings_enabled and match["sport"] == "cs2":
+            rankings = ValveRankings(self.path.with_name("valve.json"))
+            summaries = [
+                summary | rankings.enrich(history, team["id"], cutoff, now)
+                for history, team, summary in zip(rows, (first, second), summaries, strict=True)
+            ]
         h2h = {
             r["id"]: r
             for history in rows
@@ -210,4 +227,5 @@ class Statistics:
                 "scope": "доступная выборка, до 100 последних матчей каждой команды",
             },
             "roster_changes_verified": False,
+            "ranking_source": "Valve VRS" if any(s.get("valve_rank") or s.get("top10") for s in summaries) else None,
         }

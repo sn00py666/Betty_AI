@@ -45,7 +45,7 @@ async def show_offers(message, match):
 @router.message(CommandStart())
 async def start(message: Message, users: Users):
     first_visit = not users.get(message.from_user.id).get("started")
-    users.update(message.from_user.id, started=True)
+    users.update(message.from_user.id, started=True, username=message.from_user.username)
     await message.answer(
         content.WELCOME if first_visit else "<b>Выбери дисциплину:</b>", reply_markup=menu.disciplines()
     )

@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     ai_daily_limit: int = Field(default=500, ge=0)
     ai_model: str = "google/gemini-2.5-flash-lite"
     ai_temperature: float = Field(default=0.35, ge=0, le=2)
+    valve_rankings_enabled: bool = True
+    admin_user_ids: list[int] = Field(default_factory=list)
 
     telegram_bot_token: SecretStr
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"

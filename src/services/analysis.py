@@ -60,6 +60,8 @@ def render(match, commentary=None):
     if statistics:
         updated = datetime.fromtimestamp(statistics["updated_at"], UTC).astimezone(MOSCOW).strftime("%d.%m %H:%M")
         lines.append(f"PandaScore, {updated} МСК")
+        if statistics.get("ranking_source"):
+            lines.append("Рейтинг и топ-10: Valve VRS")
     lines.append("Не является финансовым советом. 18+")
     return prevent_auto_links("\n".join(lines))
 
