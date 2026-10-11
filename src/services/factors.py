@@ -15,6 +15,15 @@ def factors(match):
         )
         result.append(dict(label=label, text=text, edge=edge))
 
+    games_a, games_b = first.get("games", 0), second.get("games", 0)
+    if games_a >= 3 and games_b >= 3:
+        add(
+            "Последние игры",
+            f"побед: {a} — {first['wins']}/{games_a}, {b} — {second['wins']}/{games_b}",
+            first["wins"] / games_a,
+            second["wins"] / games_b,
+        )
+
     top_a, top_b = first.get("top10", {}), second.get("top10", {})
     if top_a.get("games") and top_b.get("games"):
         add(
@@ -82,11 +91,6 @@ def factor_summary(items, winner, teams):
                 f"{count} {'фактор' if count == 1 else 'фактора' if count < 5 else 'факторов'} за {teams[side]}"
             )
     neutral = sum(item["edge"] == "neutral" for item in items)
-    unknown = sum(item["edge"] == "unknown" for item in items)
     if neutral:
         parts.append(f"{neutral} {'нейтральный' if neutral == 1 else 'нейтральных'}")
-    if unknown:
-        parts.append(
-            f"{unknown} {'критерий' if unknown == 1 else 'критерия' if unknown < 5 else 'критериев'} без данных"
-        )
     return ", ".join(parts)

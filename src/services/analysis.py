@@ -42,17 +42,20 @@ def render(match, commentary=None):
         lines.append(f"<b>Победа {teams[commentary.winner]} — {commentary.probability}%</b>")
     else:
         lines.append("<b>Явного фаворита нет</b>" if commentary and statistics else "<b>Прогноз недоступен</b>")
-    items = factors(match)
+    items = [item for item in factors(match) if item["edge"] != "unknown"]
     winner = commentary.winner if valid else "unclear"
-    lines.extend([f"<i>{factor_summary(items, winner, teams)}</i>", ""])
-    lines.extend(f"{item['label']} — {escape(item['text'])}" for item in items)
-    lines.append("")
+    if items:
+        lines.extend([f"<i>{factor_summary(items, winner, teams)}</i>", ""])
+        lines.extend(f"{item['label']} — {escape(item['text'])}" for item in items)
+        lines.append("")
+    else:
+        lines.append("")
     if commentary and statistics:
         lines.append(escape(canonical_text(without_links(commentary.summary), match["sport"])))
     elif statistics:
         lines.append("AI-разбор сейчас недоступен. Показаны подтверждённые факторы матча.")
     else:
-        lines.append("Недостаточно статистики для оценки исхода.")
+        lines.append("Разбор этого матча пока не сформирован.")
     lines.extend(["", "━━━━━━━━━━━━━━"])
     if statistics:
         updated = datetime.fromtimestamp(statistics["updated_at"], UTC).astimezone(MOSCOW).strftime("%d.%m %H:%M")

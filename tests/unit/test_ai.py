@@ -114,7 +114,7 @@ def test_recent_comparison_uses_win_rates_and_is_separate_from_top10(match):
     payload = facts(match)
     assert payload["recent_form"]["edge"] == "team2"
     assert payload["recent_form"]["team1"] == {"wins": 4, "games": 5}
-    assert payload["factors"][0]["edge"] == "unknown"
+    assert next(item for item in payload["factors"] if item["label"] == "Форма против топов")["edge"] == "unknown"
 
 
 def test_conflicting_evidence_cannot_be_rendered_as_equal_form(match):

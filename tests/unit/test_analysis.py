@@ -59,8 +59,9 @@ def test_unknown_factors_are_not_neutral(match):
         for key in ("top10", "winning_round_margin", "active_maps", "country"):
             match["statistics"][side].pop(key)
     text = render(match, Commentary(summary="Матч близкий.", winner="team1", probability=52))
-    assert "2 нейтральных, 3 критерия без данных" in text
-    assert "нет раундовой статистики" in text
+    assert "2 нейтральных" in text
+    assert "без данных" not in text and "нет данных" not in text
+    assert "Разрыв в счёте" not in text and "Пул карт" not in text
     assert "🇹🇷" not in text
     assert "+3" not in text
 
@@ -76,7 +77,19 @@ def test_no_statistics_has_no_market_prediction(match):
     text = render(match)
     assert "Прогноз недоступен" in text
     assert "%" not in text and "Победа Aurora" not in text
-    assert "Недостаточно статистики" in text
+    assert "Разбор этого матча пока не сформирован" in text
+    assert "<i></i>" not in text and "без данных" not in text
+
+
+def test_sparse_card_shows_actual_reason_for_prediction(match):
+    match["statistics"]["team1"] = {"games": 5, "wins": 4}
+    match["statistics"]["team2"] = {"games": 5, "wins": 3}
+    text = render(match, Commentary(summary="Последние результаты Aurora лучше.", winner="team1", probability=55))
+    assert "1 фактор за Aurora, 1 нейтральный" in text
+    assert "Последние игры — побед: Aurora — 4/5, BETBOOM — 3/5" in text
+    assert "Форма против топов" not in text
+    assert "На турнире" not in text
+    assert "нет данных" not in text and "без данных" not in text
 
 
 def test_escaping_and_separate_bookmaker_offers(match):
