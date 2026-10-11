@@ -185,8 +185,51 @@ async def test_bad_response_keeps_last_snapshot(directory):
     folder = directory / "fonbet"
     save_json(folder / "latest.json", {"fetched_at": "old", "matches": ["old"]})
     state = await execute(directory, lambda _: httpx.Response(200, json={"error": "unavailable"}))
-    assert state["paused"]
+    assert not state["paused"]
+    assert state["next_request"] >= time.time() + 3599
     assert read_json(folder / "latest.json", {})["fetched_at"] == "old"
+    assert gzip.decompress((folder / "failed-response.gz").read_bytes())
+
+
+@pytest.mark.asyncio
+async def test_parse_error_recovers_on_next_scheduled_attempt(directory):
+    state = await execute(directory, lambda _: httpx.Response(200, json={"error": "unavailable"}))
+    assert not state["paused"]
+
+    def unexpected(_):
+        pytest.fail("До конца паузы запросы не нужны")
+
+    await execute(directory, unexpected)
+    state["next_request"] = 0
+    save_json(directory / "fonbet" / "state.json", state)
+    state = await execute(directory, lambda _: httpx.Response(200, text=(FIXTURES / "fonbet.json").read_text()))
+    assert state["error"] is None and not state["paused"] and state["failures"] == 0
+    assert read_json(directory / "fonbet" / "latest.json", {})["matches"]
+
+
+@pytest.mark.asyncio
+async def test_browser_timeout_retries_but_access_check_stays_paused(tmp_path, monkeypatch):
+    from integrations.errors import StopSource
+
+    async def timeout(*args):
+        raise ValueError("betboom: ожидание линии: TimeoutError")
+
+    monkeypatch.setattr("collect.load_rendered", timeout)
+    async with httpx.AsyncClient() as client:
+        await collect_one("betboom", client, tmp_path)
+    path = tmp_path / "betboom" / "state.json"
+    state = read_json(path, {})
+    assert not state["paused"] and state["next_request"] >= time.time() + 3599
+    state["next_request"] = 0
+    save_json(path, state)
+
+    async def blocked(*args):
+        raise StopSource("betboom: проверка посетителя")
+
+    monkeypatch.setattr("collect.load_rendered", blocked)
+    async with httpx.AsyncClient() as client:
+        await collect_one("betboom", client, tmp_path)
+    assert read_json(path, {})["paused"]
 
 
 def test_leon_series_market_and_locked_prices():

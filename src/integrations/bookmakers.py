@@ -247,19 +247,29 @@ def parse_leon(text, captured_at=None, url=None):
 def parse_betboom(text, captured_at=None, url=None):
     """Основной рынок «Исход» в линии CS2 / Dota 2."""
     soup = BeautifulSoup(text, "html.parser")
-    heading = soup.select_one("h3.bb--s")
     selected = soup.select_one('[role="radio"][aria-label="Исход"][aria-checked="true"]')
+    heading = selected.find_previous("h3") if selected else None
     if not heading or heading.get_text(strip=True) not in ("CS2", "Dota 2") or not selected:
         raise ValueError("BetBoom: не найдена линия CS2 / Dota 2 с выбранным рынком «Исход»")
-    # При прокрутке закреплённый заголовок относится к видимой области, а не к первым DOM-карточкам.
-    for sticky in soup.select(".bb-Ny"):
-        sticky.decompose()
     matches = {}
     for toggle in soup.select('[id^="match-markets-toggle-"]'):
-        card = toggle.find_parent(class_="bb-nU")
-        teams = card.select(".bb-yO") if card else []
-        title = card.find_previous("h3", class_="bb-Ls") if card else None
-        if len(teams) == 1 and teams[0].get_text(strip=True).startswith("Итоги "):
+        # Идентификаторы и структура карточки стабильнее минифицированных bb-* классов.
+        card = toggle.parent.parent
+        members = card.select(":scope > div:first-child > div:first-child > div:first-child > div")
+        # После имени может идти бейдж HLTV; он не является частью названия команды.
+        teams = [name.get_text(" ", strip=True) for member in members if (name := member.find("span"))]
+        virtual_row = card.find_parent(attrs={"data-index": True})
+        title = None
+        if virtual_row:
+            for previous in virtual_row.find_previous_siblings():
+                if previous.select_one('[id^="tournament-trigger-"]'):
+                    title = previous.select_one("h3")
+                    break
+        else:
+            title = card.find_previous("h3")
+            if title and title.get_text(strip=True) in ("CS2", "Dota 2"):
+                title = None
+        if len(teams) == 1 and teams[0].startswith("Итоги "):
             continue  # Победитель турнира, не отдельного матча.
         if len(teams) != 2:
             raise ValueError("BetBoom: изменилась разметка команд")
@@ -268,14 +278,18 @@ def parse_betboom(text, captured_at=None, url=None):
         if re.search(r"1x1|дуэл", title.get_text(" ", strip=True), re.I):
             continue
         odds = {}
-        if any(node.get_text(strip=True).upper() in ("X", "Х", "Н") for node in toggle.parent.select(".bb-Uu")):
-            continue
         # Только основной ряд: раскрытая роспись карт не входит в этот контейнер.
+        draw = False
         for button in toggle.parent.select("button"):
-            side, value = button.select_one(".bb-Uu"), button.select_one(".bb-Vu")
-            if side and value and side.get_text(strip=True) in ("П1", "П2"):
+            labels = button.find_all("span", recursive=False)
+            side = labels[0].get_text(strip=True) if labels else ""
+            if side.upper() in ("X", "Х", "Н"):
+                draw = True
+            if side in ("П1", "П2"):
                 locked = button.has_attr("disabled") or button.get("aria-disabled") == "true"
-                odds[side.get_text(strip=True)] = None if locked else price(value.get_text(strip=True))
+                odds[side] = None if locked or len(labels) < 2 else price(labels[1].get_text(strip=True))
+        if draw:
+            continue
         period = card.select_one("time")
         event_id = toggle["id"].removeprefix("match-markets-toggle-")
         label = period.get_text(" ", strip=True) if period else ""
@@ -283,8 +297,8 @@ def parse_betboom(text, captured_at=None, url=None):
         sport = "dota2" if heading.get_text(strip=True) == "Dota 2" else "cs2"
         matches[event_id] = {
             "id": event_id,
-            "team1": teams[0].get_text(strip=True),
-            "team2": teams[1].get_text(strip=True),
+            "team1": teams[0],
+            "team2": teams[1],
             "tournament": title.get_text(" ", strip=True),
             "sport": sport,
             "best_of": None,

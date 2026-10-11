@@ -20,6 +20,7 @@ from protego import Protego
 
 from integrations.bookmakers import SOURCES, parse_response
 from integrations.browser import BROWSER_URLS, load_rendered, load_winline
+from integrations.errors import StopSource
 from services.health import heartbeat
 from services.rankings import run_rankings
 
@@ -43,10 +44,6 @@ def save_json(path, value):
     temporary = path.with_suffix(".tmp")
     temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n")
     temporary.replace(path)
-
-
-class StopSource(Exception):
-    """Прекратить запросы до ручной проверки источника."""
 
 
 def retry_after(value, now):
@@ -98,6 +95,7 @@ async def collect_one(name, client, directory=DATA):
     state["last_attempt"] = now
     save_json(state_path, state)
     url = SOURCES[name]
+    text = None
     try:
         rendered = name in ("leon", "betboom")
         if rendered:
@@ -146,7 +144,7 @@ async def collect_one(name, client, directory=DATA):
         matches = parse_response(name, text, datetime.now(UTC).isoformat())
         # Пустой список после непустого может означать изменение формата, а не исчезновение линии.
         if not matches:
-            raise StopSource("Нет подходящих матчей: требуется проверить источник; старый снимок не обновлён")
+            raise ValueError("Нет подходящих матчей; старый снимок не обновлён")
         fetched = time.time()
         for match in matches:
             match.setdefault("sport", "cs2")
@@ -181,7 +179,9 @@ async def collect_one(name, client, directory=DATA):
             temporary.replace(raw_path)
             state.update(etag=response.headers.get("etag"), last_modified=response.headers.get("last-modified"))
         save_json(folder / "latest.json", snapshot)
-        state.update(digest=digest, failures=0, error=None, last_success=fetched, http_status=response.status_code)
+        state.update(
+            digest=digest, failures=0, error=None, paused=False, last_success=fetched, http_status=response.status_code
+        )
         print(f"{name}: {len(matches)} матчей → {folder / 'latest.json'}")
     except httpx.HTTPStatusError as error:
         code = error.response.status_code
@@ -200,10 +200,26 @@ async def collect_one(name, client, directory=DATA):
         state.update(failures=failures, next_request=time.time() + min(86400, INTERVAL * 2 ** min(failures, 6)))
         state["error"] = type(error).__name__
         print(f"{name}: ошибка сети, пауза увеличена")
-    except (StopSource, ValueError, KeyError, TypeError, OverflowError) as error:
+    except StopSource as error:
         state["http_status"] = None
         state.update(paused=True, error=str(error))
         print(f"{name}: остановлен — {error}")
+    except (ValueError, KeyError, TypeError, OverflowError) as error:
+        # Неполная загрузка и временно некорректная карточка не останавливают сбор навсегда.
+        failures = state.get("failures", 0) + 1
+        delay = min(86400, INTERVAL * 2 ** min(failures, 6))
+        state.update(
+            paused=False,
+            failures=failures,
+            next_request=time.time() + delay,
+            error=str(error),
+            http_status=None,
+        )
+        if text:
+            temporary = folder / "failed-response.tmp"
+            temporary.write_bytes(gzip.compress(text.encode()))
+            temporary.replace(folder / "failed-response.gz")
+        print(f"{name}: {error}; повтор через {delay // 60} мин")
     finally:
         save_json(state_path, state)
 

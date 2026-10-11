@@ -75,3 +75,38 @@ def test_betboom_outright_is_not_a_match():
     teams[1].decompose()
     rows = parse_response("betboom", str(soup), "2026-10-04T23:00:00+00:00")
     assert rows == []
+
+
+def test_betboom_current_markup_does_not_depend_on_minified_classes():
+    from bs4 import BeautifulSoup
+
+    html = (FIXTURES.parent / "betboom-20261012.html").read_text()
+    soup = BeautifulSoup(html, "html.parser")
+    for i, element in enumerate(soup.select("[class]")):
+        element["class"] = [f"new-{i}"]
+    rows = parse_response("betboom", str(soup), "2026-10-11T22:27:00Z")
+    assert len(rows) == 1
+    match = rows[0]
+    assert (match["team1"], match["team2"]) == ("Team Ct0m", "Team SCADE")
+    assert (match["p1"], match["p2"]) == (1.75, 1.98)
+    assert match["tournament"] == "BETBOOM Streamers Battle CS #6"
+    assert match["starts_at"] == "2026-10-12T13:00:00+00:00"
+
+
+def test_betboom_virtual_cards_without_their_heading_are_not_misattributed():
+    from bs4 import BeautifulSoup
+
+    html = (FIXTURES.parent / "betboom-20261012.html").read_text()
+    soup = BeautifulSoup(html, "html.parser")
+    soup.select_one('[id^="tournament-trigger-"]').find_parent(attrs={"data-index": True}).decompose()
+    sticky = "<div><h3>Чужой закреплённый турнир</h3></div>"
+    assert parse_response("betboom", sticky + str(soup), "2026-10-11T22:27:00Z") == []
+
+
+def test_betboom_ranking_badges_are_not_team_names_or_sticky_headers():
+    html = (FIXTURES.parent / "betboom-ranked-team.html").read_text()
+    rows = parse_response("betboom", html, "2026-10-11T22:30:00Z")
+    assert len(rows) == 1
+    assert (rows[0]["team1"], rows[0]["team2"]) == ("9z Team", "Aurora")
+    assert (rows[0]["p1"], rows[0]["p2"]) == (3.4, 1.32)
+    assert rows[0]["tournament"] == "TP World Championship 2026"
