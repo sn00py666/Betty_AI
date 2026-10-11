@@ -145,6 +145,12 @@ async def collect_one(name, client, directory=DATA):
         # Пустой список после непустого может означать изменение формата, а не исчезновение линии.
         if not matches:
             raise ValueError("Нет подходящих матчей; старый снимок не обновлён")
+        if any(
+            not isinstance(match.get(side), str) or not match[side].strip()
+            for match in matches
+            for side in ("team1", "team2")
+        ):
+            raise ValueError("Не прочитаны названия команд; старый снимок не обновлён")
         fetched = time.time()
         for match in matches:
             match.setdefault("sport", "cs2")

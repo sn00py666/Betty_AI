@@ -110,3 +110,11 @@ def test_betboom_ranking_badges_are_not_team_names_or_sticky_headers():
     assert (rows[0]["team1"], rows[0]["team2"]) == ("9z Team", "Aurora")
     assert (rows[0]["p1"], rows[0]["p2"]) == (3.4, 1.32)
     assert rows[0]["tournament"] == "TP World Championship 2026"
+
+
+def test_betboom_placeholder_icon_is_not_an_empty_team_name():
+    html = (FIXTURES.parent / "betboom-team-icons.html").read_text()
+    rows = parse_response("betboom", html, "2026-10-11T22:33:00Z")
+    assert len(rows) == 1
+    assert (rows[0]["team1"], rows[0]["team2"]) == ("Bread Eaters Esports", "Passion UA AC")
+    assert (rows[0]["p1"], rows[0]["p2"]) == (1.62, 2.15)

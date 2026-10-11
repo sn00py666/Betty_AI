@@ -257,7 +257,12 @@ def parse_betboom(text, captured_at=None, url=None):
         card = toggle.parent.parent
         members = card.select(":scope > div:first-child > div:first-child > div:first-child > div")
         # После имени может идти бейдж HLTV; он не является частью названия команды.
-        teams = [name.get_text(" ", strip=True) for member in members if (name := member.find("span"))]
+        teams = [
+            text
+            for member in members
+            if (name := member.select_one(":scope > div > div > div > div:last-child > span"))
+            and (text := name.get_text(" ", strip=True))
+        ]
         virtual_row = card.find_parent(attrs={"data-index": True})
         title = None
         if virtual_row:

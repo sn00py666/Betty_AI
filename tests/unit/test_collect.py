@@ -208,6 +208,16 @@ async def test_parse_error_recovers_on_next_scheduled_attempt(directory):
 
 
 @pytest.mark.asyncio
+async def test_incomplete_team_name_cannot_replace_successful_snapshot(directory, monkeypatch):
+    folder = directory / "fonbet"
+    save_json(folder / "latest.json", {"fetched_at": "old", "matches": ["old"]})
+    monkeypatch.setattr("collect.parse_response", lambda *args: [{"team1": "A", "team2": ""}])
+    state = await execute(directory, lambda _: httpx.Response(200, text="original page"))
+    assert state["error"] and not state["paused"]
+    assert read_json(folder / "latest.json", {})["fetched_at"] == "old"
+
+
+@pytest.mark.asyncio
 async def test_browser_timeout_retries_but_access_check_stays_paused(tmp_path, monkeypatch):
     from integrations.errors import StopSource
 
