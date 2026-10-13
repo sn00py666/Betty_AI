@@ -4,6 +4,8 @@ from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import Message
 
+from services.monitoring import report_parts
+
 router = Router(name="admin")
 router.message.filter(F.chat.type == "private")
 
@@ -18,4 +20,5 @@ async def status(message: Message, settings, monitor):
     if message.from_user.id not in settings.admin_user_ids:
         await message.answer("Эта команда доступна модератору.")
         return
-    await message.answer(monitor.report())
+    for part in report_parts(monitor.report()):
+        await message.answer(part)

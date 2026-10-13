@@ -42,7 +42,9 @@ def match():
 
 def test_requested_card_layout(match):
     text = render(match, Commentary(summary="Перевес Aurora небольшой, матч близкий.", winner="team1", probability=58))
-    assert text.startswith("<b>🇹🇷 Aurora vs 🇷🇺 BETBOOM</b>\nESL Pro League · Групповой этап. Bo3")
+    assert text.startswith('<b><tg-emoji emoji-id="5291987642450228345">🇹🇷</tg-emoji> Aurora vs ')
+    assert '<tg-emoji emoji-id="5298896909094657296">🇷🇺</tg-emoji> BETBOOM</b>' in text
+    assert "ESL Pro League · Групповой этап. Bo3" in text
     assert "<b>Победа Aurora — 58%</b>\n<i>3 фактора за Aurora, 2 нейтральных</i>" in text
     assert text.index("Победа Aurora") < text.index("Форма против топов") < text.index("Перевес Aurora")
     assert "На турнире — обе идут со счётом 1-1" in text
@@ -62,7 +64,7 @@ def test_unknown_factors_are_not_neutral(match):
     assert "2 нейтральных" in text
     assert "без данных" not in text and "нет данных" not in text
     assert "Разрыв в счёте" not in text and "Пул карт" not in text
-    assert "🇹🇷" not in text
+    assert 'emoji-id="5291987642450228345"' in text  # Логотип не зависит от доступности страны в статистике.
     assert "+3" not in text
 
 

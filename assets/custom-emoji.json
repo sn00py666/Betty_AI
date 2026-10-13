@@ -1,0 +1,319 @@
+{
+  "verified_at": "2026-10-14",
+  "teams": {
+    "spirit": {
+      "name": "Spirit",
+      "id": "5343719325234662378",
+      "emoji": "🇷🇺",
+      "pack": "CsnewsCS3NEWSHLTVTeams"
+    },
+    "vitality": {
+      "name": "Vitality",
+      "id": "5291737237266937276",
+      "emoji": "🇪🇺",
+      "pack": "CsnewsCS3NEWSHLTVTeams"
+    },
+    "falcons": {
+      "name": "Falcons",
+      "id": "5289819156412141088",
+      "emoji": "🇪🇺",
+      "pack": "CsnewsCS3NEWSHLTVTeams"
+    },
+    "mouz": {
+      "name": "MOUZ",
+      "id": "5292183441419307718",
+      "emoji": "🇪🇺",
+      "pack": "CsnewsCS3NEWSHLTVTeams"
+    },
+    "mongolz": {
+      "name": "The MongolZ",
+      "id": "5292177548724177045",
+      "emoji": "🇲🇳",
+      "pack": "CsnewsCS3NEWSHLTVTeams"
+    },
+    "furia": {
+      "name": "FURIA",
+      "id": "5289945729098353382",
+      "emoji": "🇧🇷",
+      "pack": "CsnewsCS3NEWSHLTVTeams"
+    },
+    "g2": {
+      "name": "G2",
+      "id": "5292176032600726778",
+      "emoji": "🇪🇺",
+      "pack": "CsnewsCS3NEWSHLTVTeams"
+    },
+    "aurora": {
+      "name": "Aurora",
+      "id": "5291987642450228345",
+      "emoji": "🇹🇷",
+      "pack": "CsnewsCS3NEWSHLTVTeams"
+    },
+    "navi": {
+      "name": "NAVI",
+      "id": "5292091048082839649",
+      "emoji": "🇪🇺",
+      "pack": "CsnewsCS3NEWSHLTVTeams"
+    },
+    "pain": {
+      "name": "paiN",
+      "id": "5292210886260328413",
+      "emoji": "🇧🇷",
+      "pack": "CsnewsCS3NEWSHLTVTeams"
+    },
+    "astralis": {
+      "name": "Astralis",
+      "id": "5291905264977483800",
+      "emoji": "🇩🇰",
+      "pack": "CsnewsCS3NEWSHLTVTeams"
+    },
+    "3dmax": {
+      "name": "3DMAX",
+      "id": "5292226193523774398",
+      "emoji": "🇫🇷",
+      "pack": "CsnewsCS3NEWSHLTVTeams"
+    },
+    "faze": {
+      "name": "FaZe",
+      "id": "5359520849219072355",
+      "emoji": "🇪🇺",
+      "pack": "CsnewsCS3NEWSHLTVTeams"
+    },
+    "liquid": {
+      "name": "Liquid",
+      "id": "5291967928550327955",
+      "emoji": "🇺🇸",
+      "pack": "CsnewsCS3NEWSHLTVTeams"
+    },
+    "heroic": {
+      "name": "HEROIC",
+      "id": "5291830678575416594",
+      "emoji": "🇪🇺",
+      "pack": "CsnewsCS3NEWSHLTVTeams"
+    },
+    "gamerlegion": {
+      "name": "GamerLegion",
+      "id": "5433752959429158380",
+      "emoji": "🇪🇺",
+      "pack": "CsnewsCS3NEWSHLTVTeams"
+    },
+    "virtuspro": {
+      "name": "Virtus.pro",
+      "id": "5292284020963447552",
+      "emoji": "🇷🇺",
+      "pack": "CsnewsCS3NEWSHLTVTeams"
+    },
+    "100thieves": {
+      "name": "100 Thieves",
+      "id": "5415874445094986919",
+      "emoji": "🇪🇺",
+      "pack": "CsnewsCS3NEWSHLTVTeams"
+    },
+    "wildcard": {
+      "name": "Wildcard",
+      "id": "5436089666451318485",
+      "emoji": "🫥",
+      "pack": "CsnewsCS3NEWSHLTVTeams"
+    },
+    "bcgame": {
+      "name": "BC.Game",
+      "id": "5438611091426944969",
+      "emoji": "🇪🇺",
+      "pack": "CsnewsCS3NEWSHLTVTeams"
+    },
+    "b8": {
+      "name": "B8",
+      "id": "5436127045551695555",
+      "emoji": "🇺🇦",
+      "pack": "CsnewsCS3NEWSHLTVTeams2"
+    },
+    "legacy": {
+      "name": "Legacy",
+      "id": "5438646683820927722",
+      "emoji": "🇧🇷",
+      "pack": "CsnewsCS3NEWSHLTVTeams2"
+    },
+    "passionua": {
+      "name": "Passion UA",
+      "id": "5298913668057037596",
+      "emoji": "🌐",
+      "pack": "CsnewsCS3NEWSHLTVTeams2"
+    },
+    "lynnvision": {
+      "name": "Lynn Vision",
+      "id": "5298873535882625830",
+      "emoji": "🇨🇳",
+      "pack": "CsnewsCS3NEWSHLTVTeams2"
+    },
+    "m80": {
+      "name": "M80",
+      "id": "5296454743445510646",
+      "emoji": "🇺🇸",
+      "pack": "CsnewsCS3NEWSHLTVTeams2"
+    },
+    "tyloo": {
+      "name": "TYLOO",
+      "id": "5296779533167408985",
+      "emoji": "🇨🇳",
+      "pack": "CsnewsCS3NEWSHLTVTeams2"
+    },
+    "fnatic": {
+      "name": "fnatic",
+      "id": "5298866655345023556",
+      "emoji": "🇪🇺",
+      "pack": "CsnewsCS3NEWSHLTVTeams2"
+    },
+    "cybershoke": {
+      "name": "CYBERSHOKE",
+      "id": "5298768678551065373",
+      "emoji": "🇺🇦",
+      "pack": "CsnewsCS3NEWSHLTVTeams2"
+    },
+    "betboomteam": {
+      "name": "BETBOOM",
+      "id": "5298896909094657296",
+      "emoji": "🇷🇺",
+      "pack": "CsnewsCS3NEWSHLTVTeams2"
+    },
+    "nip": {
+      "name": "NIP",
+      "id": "5298689865901187852",
+      "emoji": "🇪🇺",
+      "pack": "CsnewsCS3NEWSHLTVTeams2"
+    },
+    "ence": {
+      "name": "ENCE",
+      "id": "5298790179157346008",
+      "emoji": "🇸🇪",
+      "pack": "CsnewsCS3NEWSHLTVTeams2"
+    },
+    "mibr": {
+      "name": "MIBR",
+      "id": "5384280184629267449",
+      "emoji": "🇧🇷",
+      "pack": "CsnewsCS3NEWSHLTVTeams2"
+    },
+    "nrg": {
+      "name": "NRG",
+      "id": "5298975360967286014",
+      "emoji": "🇺🇸",
+      "pack": "CsnewsCS3NEWSHLTVTeams2"
+    },
+    "fluxo": {
+      "name": "Fluxo",
+      "id": "5298710005002834431",
+      "emoji": "🇧🇷",
+      "pack": "CsnewsCS3NEWSHLTVTeams2"
+    },
+    "nemiga": {
+      "name": "Nemiga",
+      "id": "5298646800264103127",
+      "emoji": "🇷🇺",
+      "pack": "CsnewsCS3NEWSHLTVTeams2"
+    },
+    "9ine": {
+      "name": "9INE",
+      "id": "5298917056786243510",
+      "emoji": "🇪🇺",
+      "pack": "CsnewsCS3NEWSHLTVTeams2"
+    },
+    "gentlemates": {
+      "name": "Gentle Mates",
+      "id": "5307508224033852771",
+      "emoji": "🇪🇸",
+      "pack": "CsnewsCS3NEWSHLTVTeams2"
+    },
+    "1win": {
+      "name": "1win",
+      "id": "5301290537318386947",
+      "emoji": "🇷🇺",
+      "pack": "CsnewsCS3NEWSHLTVTeams3"
+    },
+    "parivision": {
+      "name": "PARIVISION",
+      "id": "5438405667436141926",
+      "emoji": "🇷🇺",
+      "pack": "CsnewsCS3NEWSHLTVTeams3"
+    },
+    "9z": {
+      "name": "9z",
+      "id": "5300841215019748195",
+      "emoji": "🌎",
+      "pack": "CsnewsCS3NEWSHLTVTeams3"
+    },
+    "og": {
+      "name": "OG",
+      "id": "5418001347259700147",
+      "emoji": "🇪🇺",
+      "pack": "CsnewsCS3NEWSHLTVTeams3"
+    },
+    "sharks": {
+      "name": "Sharks",
+      "id": "5300964806998660710",
+      "emoji": "🇧🇷",
+      "pack": "CsnewsCS3NEWSHLTVTeams3"
+    },
+    "big": {
+      "name": "BIG",
+      "id": "5300741438634496362",
+      "emoji": "🇩🇪",
+      "pack": "CsnewsCS3NEWSHLTVTeams3"
+    },
+    "fut": {
+      "name": "FUT",
+      "id": "5298913264330115208",
+      "emoji": "🇪🇺",
+      "pack": "CsnewsCS3NEWSHLTVTeams2"
+    },
+    "flyquest": {
+      "name": "FlyQuest",
+      "id": "5298863348220200941",
+      "emoji": "🇦🇺",
+      "pack": "CsnewsCS3NEWSHLTVTeams2"
+    },
+    "rareatom": {
+      "name": "Rare Atom",
+      "id": "5303241204090041815",
+      "emoji": "🇨🇳",
+      "pack": "CsnewsCS3NEWSHLTVTeams3"
+    },
+    "alliance": {
+      "name": "Alliance",
+      "id": "5301215396865545117",
+      "emoji": "🇸🇪",
+      "pack": "CsnewsCS3NEWSHLTVTeams3"
+    }
+  },
+  "bookmakers": {
+    "betboom": {
+      "id": "5397719798723420313",
+      "emoji": "😍",
+      "pack": "BETBOOM_EMOJI_PACK"
+    },
+    "winline": {
+      "id": "5249203579134179981",
+      "emoji": "🏆",
+      "pack": "WinlineEmoji"
+    },
+    "leon": {
+      "id": "5436020607672163490",
+      "emoji": "⚽️",
+      "pack": "LEON_Emoji_Pack"
+    },
+    "fonbet": {
+      "id": "5431883166891657332",
+      "emoji": "🎰",
+      "pack": "EtoEuroBrat"
+    },
+    "pari": {
+      "id": "5260672048052595067",
+      "emoji": "↗️",
+      "pack": "pariemojinew"
+    },
+    "marathon": {
+      "id": "5235771446873069393",
+      "emoji": "🩷",
+      "pack": "marathonbet_emoji"
+    }
+  }
+}

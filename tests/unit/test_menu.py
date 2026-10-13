@@ -3,10 +3,12 @@ from unittest.mock import AsyncMock
 import pytest
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
-from aiogram.methods import AnswerCallbackQuery, EditMessageText, SendMessage
+from aiogram.methods import AnswerCallbackQuery, EditMessageText, SendAnimation, SendMessage
 from aiogram.types import Message, Update
 
+from config import Settings
 from handlers import menu
+from services.ai import Commentary
 from services.users import Users
 
 
@@ -27,7 +29,7 @@ async def bot(monkeypatch):
     async with Bot(token="123456:TEST_TOKEN", default=DefaultBotProperties(parse_mode="HTML")) as instance:
 
         async def reply(bot, method, **kwargs):
-            if isinstance(method, SendMessage | EditMessageText):
+            if isinstance(method, SendMessage | EditMessageText | SendAnimation):
                 return Message(message_id=10, date=1, chat={"id": method.chat_id, "type": "private"}).as_(bot)
             return True
 
@@ -36,10 +38,10 @@ async def bot(monkeypatch):
         yield instance
 
 
-def incoming(*, text=None, callback=None, chat_type="private"):
+def incoming(*, text=None, callback=None, chat_type="private", message_id=1):
     user = {"id": 42, "is_bot": False, "first_name": "Test"}
     message = {
-        "message_id": 1,
+        "message_id": message_id,
         "date": 1,
         "chat": {"id": 42, "type": chat_type},
         "from": user,
@@ -91,11 +93,17 @@ def analyst():
 
 async def test_first_and_repeated_start_survive_restart(dispatcher, bot, users):
     await dispatcher.feed_update(bot, incoming(text="/start"), users=users)
-    first = requests(bot, SendMessage)[0]
-    assert "привет" in first.text and "Демо" not in first.text
+    first = requests(bot, SendAnimation)[0]
+    assert "привет" in first.caption and "Демо" not in first.caption
+    assert first.animation.path.is_file()
+    assert first.animation.path.name == "betty-start-motion-v3.mp4"
     assert [row[0].text for row in first.reply_markup.inline_keyboard] == ["CS-2", "Dota 2"]
     await dispatcher.feed_update(bot, incoming(text="/start"), users=Users(users.path))
-    assert requests(bot, SendMessage)[-1].text == "<b>Выбери дисциплину:</b>"
+    repeated = requests(bot, SendAnimation)[-1]
+    assert repeated.caption == "<b>Выбери дисциплину:</b>"
+    assert repeated.animation.path == first.animation.path
+    assert repeated.reply_markup == first.reply_markup
+    assert not requests(bot, SendMessage)
 
 
 async def test_selection_persists_real_matches(dispatcher, bot, users, matches):
@@ -186,3 +194,40 @@ async def test_live_matches_fill_first_pages_before_upcoming(dispatcher, bot, us
         "match:prematch-1",
         "match:prematch-2",
     ]
+
+
+async def test_sorting_selection_persists_and_returns_to_page_one(dispatcher, bot, users, matches):
+    await dispatcher.feed_update(bot, incoming(callback="sort:cs2:time"), users=users, matches=matches)
+    assert Users(users.path).get(42)["match_sort"] == "time"
+    message = requests(bot, EditMessageText)[-1]
+    assert "1/1" in message.text
+    assert any(b.text == "✓ По времени" for row in message.reply_markup.inline_keyboard for b in row)
+
+
+async def test_bonus_command_and_old_button_open_separate_screen(dispatcher, bot):
+    settings = Settings(_env_file=None, telegram_bot_token="123:TEST", bonus_offers=[])
+    for update in (incoming(text="/bonus"), incoming(callback="bonus")):
+        await dispatcher.feed_update(bot, update, settings=settings)
+        text = requests(bot, SendMessage)[-1].text
+        assert "Бонусы букмекеров" in text and "нет опубликованных" in text and "Ближайшие матчи" not in text
+
+
+async def test_favorite_survives_odds_button_but_not_changed_match(
+    dispatcher, bot, users, matches, analyst, monkeypatch
+):
+    async def explain(match):
+        match["statistics"] = {"updated_at": 1791200880, "team1": {}, "team2": {}}
+        return Commentary(summary="Перевес второй команды.", winner="team2", probability=60)
+
+    analyst.explain.side_effect = explain
+    match = matches.read()[0]
+    await dispatcher.feed_update(
+        bot, incoming(callback="match:" + match["id"]), users=users, matches=matches, analyst=analyst
+    )
+    assert "Фаворит AI:" in requests(bot, SendMessage)[-1].text
+    update = incoming(callback="odds:" + match["id"], message_id=10)
+    await dispatcher.feed_update(bot, update, users=users, matches=matches)
+    assert "Фаворит AI:" in requests(bot, SendMessage)[-1].text
+    monkeypatch.setattr(matches, "get", lambda _: dict(match, status="live"))
+    await dispatcher.feed_update(bot, update, users=users, matches=matches)
+    assert "Нет актуального фаворита AI" in requests(bot, SendMessage)[-1].text

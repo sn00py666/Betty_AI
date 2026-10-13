@@ -8,6 +8,8 @@ from html import escape
 
 from aiogram.exceptions import TelegramAPIError
 
+from services.dota_rankings import SOURCES as DOTA_SOURCES
+from services.dota_rankings import available_teams, enabled_sources, load_source, select_ranking
 from services.health import read, safe_error, write
 from services.matches import BOOKMAKERS, MOSCOW, date
 
@@ -42,6 +44,21 @@ def classify(state):
     if code == 429 or "HTTP 429" in str(error):
         return "limited"
     return "error"
+
+
+def report_parts(text):
+    """Режем по строкам, сохраняя HTML-теги; оставляем запас до лимита Telegram."""
+    parts, lines, size = [], [], 0
+    for line in text.splitlines():
+        length = len(line.encode("utf-16-le")) // 2 + 1
+        if lines and size + length > 3500:
+            parts.append("\n".join(lines))
+            lines, size = [], 0
+        lines.append(line)
+        size += length
+    if lines:
+        parts.append("\n".join(lines))
+    return parts
 
 
 class Monitor:
@@ -189,6 +206,56 @@ class Monitor:
                     detail += "; сбор рейтинга не начался"
             add(name, code, detail)
 
+        sources = enabled_sources(self.settings)
+        states = {source: load_source(self.directory, source) for source in sources}
+        selected, teams, cached = select_ranking(self.directory, sources, now, states)
+
+        def initial_wait(state):
+            if not state:
+                return now - self.started < 120
+            return (
+                not state.get("last_success")
+                and not state.get("error")
+                and 0 <= now - state.get("last_attempt", 0) < 120
+            )
+
+        for source, label in DOTA_SOURCES.items():
+            name = f"{label} · Dota 2"
+            if source not in sources:
+                add(name, "disabled", "Выключен")
+                continue
+            state = states[source]
+            usable = available_teams(source, state, now)
+            code = classify(state)
+            if initial_wait(state):
+                code = "idle"
+            elif not state:
+                code = "error"
+            elif code == "ok" and not usable:
+                code = "stale"
+            detail = f"{len(usable)} команд; обновление {stamp(state.get('last_success'))}"
+            if state.get("published"):
+                detail += f"; рейтинг от {state['published']}"
+            if state.get("error"):
+                detail += f"; {state['error']}"
+            if state.get("next_request", 0) > now:
+                detail += f"; следующий запрос {stamp(state['next_request'])}"
+            if not state:
+                detail += "; сбор ещё не начался"
+            add(name, code, detail)
+        if not sources:
+            add("Рейтинг Dota 2", "disabled", "Источники выключены; порядок по букмекерам и времени")
+        elif selected:
+            mode = "последний пригодный кеш" if cached else ("основной" if selected == "opendota" else "резервный")
+            add("Рейтинг Dota 2", "ok", f"{DOTA_SOURCES[selected]} ({mode}); {len(teams)} команд")
+        else:
+            waiting = any(initial_wait(state) for state in states.values())
+            add(
+                "Рейтинг Dota 2",
+                "idle" if waiting else "stale",
+                "Нет свежего рейтинга; порядок по букмекерам и времени",
+            )
+
         disk = shutil.disk_usage(self.directory)
         free = disk.free / (1024**3)
         add("Диск", "error" if free < 0.5 else "ok", f"Свободно {free:.2f} ГБ")
@@ -224,7 +291,8 @@ class Monitor:
                         [f"{icon} <b>{escape(item['name'])}</b> — {LABELS[item['code']]}", escape(item["detail"])]
                     )
                 try:
-                    await bot.send_message(user_id, "\n".join(lines), parse_mode="HTML")
+                    for part in report_parts("\n".join(lines)):
+                        await bot.send_message(user_id, part, parse_mode="HTML")
                 except TelegramAPIError as error:
                     previous["retry_at"] = now + 300
                     logger.warning("Алерт модератору не доставлен (%s)", type(error).__name__)

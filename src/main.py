@@ -12,6 +12,7 @@ from pydantic import ValidationError
 from config import PROJECT_ROOT, Settings
 from handlers import admin, donate, menu
 from services.ai import Analyst
+from services.emojis import EmojiFallback
 from services.health import heartbeat
 from services.matches import Matches
 from services.monitoring import Monitor
@@ -25,7 +26,7 @@ async def main() -> None:
         token = settings.telegram_bot_token.get_secret_value()
         validate_token(token)
     except (ValidationError, TokenValidationError):
-        raise SystemExit("Проверьте TELEGRAM_BOT_TOKEN и LOG_LEVEL в .env.") from None
+        raise SystemExit("Проверьте настройки .env: токен, лимиты, LOG_LEVEL и BONUS_OFFERS.") from None
 
     logging.basicConfig(level=settings.log_level, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     users = Users(PROJECT_ROOT / "data" / "users.json")
@@ -36,11 +37,12 @@ async def main() -> None:
     dispatcher.include_routers(admin.router, donate.router, menu.router)
 
     async with Bot(token=token, default=DefaultBotProperties(parse_mode="HTML")) as bot:
+        bot.session.middleware(EmojiFallback(settings.custom_emoji_enabled))
         commands = [
             BotCommand(command="start", description="Выбрать дисциплину"),
             BotCommand(command="info", description="Как работает Betty"),
             BotCommand(command="askbetty", description="Спросить Betty о матче"),
-            BotCommand(command="bonus", description="Матчи и коэффициенты"),
+            BotCommand(command="bonus", description="Бонусы букмекеров"),
             BotCommand(command="notifications", description="Подборки и напоминания"),
         ]
         await bot.set_my_commands(

@@ -1,6 +1,7 @@
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from content import SPORTS
+from services.emojis import bookmaker_icon
 from services.matches import BOOKMAKERS, start_label
 
 PAGE_SIZE = 5
@@ -16,7 +17,7 @@ def disciplines():
     return keyboard([(title, f"sport:{sport}") for sport, title in SPORTS.items()])
 
 
-def matches(items, sport, page):
+def matches(items, sport, page, mode="popular"):
     buttons = [
         (f"{m['team1']} vs {m['team2']} · {start_label(m)}"[:110], f"match:{m['id']}")
         for m in items[page * PAGE_SIZE : (page + 1) * PAGE_SIZE]
@@ -29,12 +30,18 @@ def matches(items, sport, page):
         arrows.append(InlineKeyboardButton(text="→", callback_data=f"page:{sport}:{page + 1}"))
     if arrows:
         markup.inline_keyboard.append(arrows)
+    markup.inline_keyboard.append(
+        [
+            InlineKeyboardButton(text=("✓ " if mode == value else "") + title, callback_data=f"sort:{sport}:{value}")
+            for value, title in (("popular", "По популярности"), ("time", "По времени"))
+        ]
+    )
     markup.inline_keyboard.extend(keyboard([("назад", "disciplines")]).inline_keyboard)
     return markup
 
 
 def navigation():
-    return keyboard([("👀 Выбрать матчи", "matches")])
+    return keyboard([("👀 Выбрать матчи", "matches"), ("🎁 Бонусы букмекеров", "bonus")])
 
 
 def match_actions(match):
@@ -44,15 +51,36 @@ def match_actions(match):
     return keyboard([*buttons, ("👀 Выбрать матчи", "matches")])
 
 
-def offers(match):
+def offers(match, favorite=None):
     rows = []
-    for offer in sorted(match["offers"], key=lambda o: o["p1"] or 0, reverse=True):
+    side = "p2" if favorite == "team2" else "p1"
+    for offer in sorted(match["offers"], key=lambda o: o[side] or 0, reverse=True):
         if offer["p1"] is None and offer["p2"] is None:
             continue
         p1 = f"{offer['p1']:.2f}" if offer["p1"] else "закрыт"
         p2 = f"{offer['p2']:.2f}" if offer["p2"] else "закрыт"
         rows.append(
-            [InlineKeyboardButton(text=f"{BOOKMAKERS[offer['bookmaker']]} · П1 {p1} / П2 {p2}", url=offer["url"])]
+            [
+                InlineKeyboardButton(
+                    text=f"{BOOKMAKERS[offer['bookmaker']]} · П1 {p1} / П2 {p2}",
+                    url=offer["url"],
+                    icon_custom_emoji_id=bookmaker_icon(offer["bookmaker"]),
+                )
+            ]
         )
+    rows.append([InlineKeyboardButton(text="🎁 Бонусы букмекеров", callback_data="bonus")])
     rows.append([InlineKeyboardButton(text="👀 Выбрать матчи", callback_data="matches")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def bonuses(offers):
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=BOOKMAKERS[o.bookmaker], url=str(o.url), icon_custom_emoji_id=bookmaker_icon(o.bookmaker)
+            )
+        ]
+        for o in offers
+    ]
+    rows.extend(navigation().inline_keyboard[:1])
     return InlineKeyboardMarkup(inline_keyboard=rows)

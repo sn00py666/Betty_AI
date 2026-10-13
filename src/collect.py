@@ -6,7 +6,6 @@ import fcntl
 import gzip
 import hashlib
 import json
-import os
 import random
 import time
 from contextlib import suppress
@@ -18,9 +17,11 @@ from urllib.parse import urlsplit
 import httpx
 from protego import Protego
 
+from config import RankingSettings
 from integrations.bookmakers import SOURCES, parse_response
 from integrations.browser import BROWSER_URLS, load_rendered, load_winline
 from integrations.errors import StopSource
+from services.dota_rankings import enabled_sources, run_dota_rankings
 from services.health import heartbeat
 from services.rankings import run_rankings
 
@@ -245,12 +246,15 @@ async def collect_loop(names, watch):
 
 
 async def run(names, watch):
+    settings = RankingSettings()
     tasks = [
         asyncio.create_task(heartbeat(DATA.parent / "health" / "collector.json", sources=names)),
         asyncio.create_task(collect_loop(names, watch)),
     ]
-    if os.getenv("VALVE_RANKINGS_ENABLED", "true").lower() not in ("false", "0", "no"):
+    if settings.valve_rankings_enabled:
         tasks.append(asyncio.create_task(run_rankings(DATA.parent / "valve.json")))
+    for source in enabled_sources(settings):
+        tasks.append(asyncio.create_task(run_dota_rankings(DATA.parent, source)))
     try:
         done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         for task in done:
