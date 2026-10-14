@@ -155,7 +155,7 @@ async def open_match(callback: CallbackQuery, users: Users, matches: Matches, an
         commentary = None
     await pending.edit_text(render(fresh, commentary), reply_markup=menu.match_actions(fresh))
     forecast = remember(users, callback.from_user.id, pending.message_id, fresh, commentary)
-    await asyncio.sleep(3)
+    await asyncio.sleep(6)
     if fresh := matches.get(match_id):
         await show_offers(callback.message, fresh, recall(forecast, fresh))
 

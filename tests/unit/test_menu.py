@@ -127,7 +127,7 @@ async def test_real_analysis_then_actual_bookmaker_link(dispatcher, bot, users, 
     assert "Прогноз недоступен" in requests(bot, EditMessageText)[0].text
     assert requests(bot, SendMessage)[0].text == "Анализирую текущую форму команд…"
     assert "80 000" not in requests(bot, EditMessageText)[0].text
-    menu.asyncio.sleep.assert_awaited_once_with(3)
+    menu.asyncio.sleep.assert_awaited_once_with(6)
     offers = requests(bot, SendMessage)[-1]
     assert offers.reply_markup.inline_keyboard[0][0].url == "https://pari.ru/sports/10"
 
