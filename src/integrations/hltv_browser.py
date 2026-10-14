@@ -32,13 +32,15 @@ async def load_page(address, directory: Path, state):
                 if url(page.url) != target:
                     raise StopSource("HLTV navigation address changed")
                 if response.status in (401, 403, 451):
-                    raise StopSource(f"HLTV HTTP {response.status}")
+                    scope = "robots.txt " if target.endswith("/robots.txt") else ""
+                    raise StopSource(f"HLTV {scope}HTTP {response.status}")
                 httpx.Response(
                     response.status, headers=await response.all_headers(), request=httpx.Request("GET", target)
                 ).raise_for_status()
                 title = (await page.title()).lower()
                 if "just a moment" in title or "access denied" in title or "verify" in title:
-                    raise StopSource("HLTV visitor challenge")
+                    scope = "robots.txt " if target.endswith("/robots.txt") else ""
+                    raise StopSource(f"HLTV {scope}visitor challenge")
                 if selector:
                     await page.locator(selector).first.wait_for(state="attached", timeout=15000)
                 return response
@@ -53,11 +55,16 @@ async def load_page(address, directory: Path, state):
             rules = Protego.parse(state.get("robots", ""))
             if not rules.can_fetch(address, AGENT):
                 raise StopSource("HLTV robots.txt disallows requested path")
-            selector = (
-                ".profile-team-name"
-                if "/team/" in address
-                else (".timeAndEvent" if "/matches/" in address else 'a[href^="/team/"]')
-            )
+            if "/team/" in address:
+                selector = ".profile-team-name"
+            elif "/matches/" in address and "/stats/" not in address:
+                selector = ".timeAndEvent"
+            elif "/news/" in address:
+                selector = "article.newsitem .newstext-con"
+            elif "/results" in address:
+                selector = ".results-all"
+            else:
+                selector = ".contentCol"
             await navigate(address, selector)
             html = await page.content()
             if len(html.encode()) > 20 * 1024 * 1024:

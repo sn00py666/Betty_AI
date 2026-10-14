@@ -13,3 +13,10 @@ chart datasets were removed. The match fixture retains per-map/side tables and
 ordinary/eco-adjusted columns to test that the parser selects only the correct totals.
 The schedule keeps five cards. Values and retained class names come from the real DOM.
 No cookies, account state or credentials are included. Tests make no network requests.
+
+`news.html`: сокращённый редакционный DOM статьи
+https://www.hltv.org/news/45699/woxic-on-taking-bronze-its-always-good-to-at-least-have-something-from-the-event
+получен обычным Chrome по HTTPS 15 октября 2026 года. Изображения, iframe и tooltip
+удалены; абзацы, дата, автор и ссылки сохранены для регрессионной проверки.
+Контрактные примеры результатов/статистики в test_hltv_archive.py являются
+синтетическими: соответствующие исследованные страницы возвращали HTTP 403.

@@ -314,6 +314,16 @@ def parse_match(html, address):
         "event": entity(clock, "events"),
         "status": status,
         "status_text": status_text,
+        "scores": [number(text(soup.select_one(f".team{n}-gradient .won, .team{n}-gradient .lost"))) for n in (1, 2)]
+        if status == "finished"
+        else None,
+        "mapstats_urls": list(
+            dict.fromkeys(
+                url(a["href"])
+                for a in soup.select('a[href^="/stats/matches/mapstatsid/"]')
+                if not urlsplit(a["href"]).query
+            )
+        ),
         "veto": [text(e) for e in soup.select(".veto-box")],
         "maps": maps,
         "lineups": lineups,

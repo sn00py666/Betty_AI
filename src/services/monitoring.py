@@ -220,6 +220,13 @@ class Monitor:
                     code = "blocked"
             if hltv.get("unresolved_teams"):
                 detail += f"; не сопоставлено команд: {len(hltv['unresolved_teams'])}"
+            if hltv.get("archive"):
+                counts = hltv["archive"]
+                detail += (
+                    f"; архив: {counts.get('done', 0)} загружено, "
+                    f"{counts.get('queued', 0) + counts.get('retry', 0)} в очереди, "
+                    f"{counts.get('blocked', 0)} недоступно"
+                )
             add("HLTV", code, detail)
 
         sources = enabled_sources(self.settings)

@@ -4,12 +4,15 @@ import copy
 import gzip
 import hashlib
 import json
+import sqlite3
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from integrations.hltv import parse_match, parse_team, url
+from integrations.hltv_archive import parse_archive
 from services.health import read, write
+from services.hltv_archive import Archive
 from services.matches import date
 from services.team_names import team_key
 
@@ -41,7 +44,13 @@ class HltvCache:
     def store(self, address, html, fetched_at=None):
         """Validate first; never replace good cache with a challenge/partial document."""
         address = url(address)
-        parser = parse_team if "/team/" in address else parse_match
+        parser = (
+            parse_team
+            if "/team/" in address
+            else parse_match
+            if "/matches/" in address and "/stats/" not in address
+            else parse_archive
+        )
         data = parser(html, address)
         now = time.time() if fetched_at is None else fetched_at
         entry = {"fetched_at": now, "data": data}
@@ -54,6 +63,8 @@ class HltvCache:
         temporary.replace(raw)
         previous = self.load(address)
         write(folder / (key + ".json"), entry)
+        archive = Archive(self.directory)
+        archive.discover(data, now)
         if data["kind"] == "team":
             index = self.index()
             index[str(data["id"])] = {"id": data["id"], "name": data["name"], "url": address}
@@ -87,6 +98,25 @@ class HltvCache:
             key = hashlib.sha256(team_key(name).encode()).hexdigest()
             write(self.directory / "wanted" / f"{key}.json", {"name": name, "requested_at": time.time()})
 
+    def document_context(self, address, cutoff, now, *, max_age=7 * 86400, limit=6000):
+        entry = self.load(address)
+        fetched = entry.get("fetched_at", 0)
+        if not 0 <= now - fetched <= max_age or fetched > cutoff.timestamp():
+            return None
+        data = entry.get("data", {})
+        if data.get("kind") not in ("news", "player", "event", "stats", "mapstats"):
+            return None
+        if data["kind"] == "news":
+            published = date(data.get("published_at"))
+            if not published or not cutoff - timedelta(days=30) <= published <= cutoff:
+                return None
+        body = "\n".join(data["paragraphs"]) if data["kind"] == "news" else data.get("text", "")
+        return {k: data.get(k) for k in ("kind", "url", "title", "published_at", "author", "coverage")} | {
+            "fetched_at": fetched,
+            "text": body[:limit],
+            "truncated": len(body) > limit,
+        }
+
     def context(self, match, now=None):
         if match["sport"] != "cs2":
             return None
@@ -109,6 +139,14 @@ class HltvCache:
                 continue
             # Keep complete parsed data on disk, send relevant windows to the model.
             data.pop("ranking_history", None)
+            try:
+                history = Archive(self.directory).results(
+                    team["id"], (cutoff - timedelta(days=180)).isoformat(), cutoff.isoformat(), cutoff.timestamp()
+                )
+            except sqlite3.Error:
+                history = []
+            merged = {r["id"]: r for r in history + data["results"]}
+            data["results"] = sorted(merged.values(), key=lambda r: r.get("starts_at") or "", reverse=True)
             data["results"] = [
                 r
                 for r in data["results"]
@@ -116,9 +154,11 @@ class HltvCache:
             ]
             details = []
             for record in sorted(data["results"], key=lambda r: r["starts_at"], reverse=True)[:10]:
-                detail = self.load(record["url"]).get("data", {})
+                detail_entry = self.load(record["url"])
+                detail = detail_entry.get("data", {})
                 if (
                     detail.get("status") == "finished"
+                    and detail_entry.get("fetched_at", 0) <= cutoff.timestamp()
                     and detail.get("starts_at") == record["starts_at"]
                     and {t["id"] for t in detail.get("teams", [])} == {t["id"] for t in record["teams"]}
                 ):
@@ -129,6 +169,29 @@ class HltvCache:
                 for r in data["news"]
                 if date(r.get("date")) and cutoff - timedelta(days=30) <= date(r["date"]) <= cutoff
             ][:20]
+            data["articles"] = [
+                doc for record in data["news"][:6] if (doc := self.document_context(record["url"], cutoff, now))
+            ]
+            player_urls = [
+                p["url"].replace("/player/", "/stats/players/") for p in data["roster"] if p.get("status") != "BENCHED"
+            ]
+            data["player_documents"] = [
+                doc for address in player_urls[:5] if (doc := self.document_context(address, cutoff, now, limit=5000))
+            ]
+            data["team_statistics"] = self.document_context(
+                data["url"].replace("/team/", "/stats/teams/"), cutoff, now, limit=8000
+            )
+            event_urls = list(dict.fromkeys(r["event"]["url"] for r in data["upcoming"] if r.get("event")))
+            data["event_documents"] = [
+                doc for address in event_urls[:2] if (doc := self.document_context(address, cutoff, now, max_age=86400))
+            ]
+            map_urls = [address for detail in details[:3] for address in detail.get("mapstats_urls", [])]
+            data["map_documents"] = [
+                doc
+                for address in map_urls[:4]
+                if (doc := self.document_context(address, cutoff, now, max_age=30 * 86400, limit=4000))
+            ]
+            data["coverage"]["results"] = "profile plus indexed archive; collection may still be in progress"
             data["transfers"] = [
                 r
                 for r in data["transfers"]
@@ -217,7 +280,7 @@ def enrich_statistics(statistics, context):
                 r["teams"][r["scores"].index(max(r["scores"]))]["id"] == teams["team1"]["id"] for r in h2h.values()
             ),
             "period_days": 180,
-            "scope": "HLTV profile results, series not maps",
+            "scope": "HLTV profile and indexed archive, series not maps",
         }
     stats["hltv"] = context
     return stats

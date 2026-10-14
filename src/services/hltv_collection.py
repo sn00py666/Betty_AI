@@ -2,9 +2,11 @@
 
 import asyncio
 import logging
+import shutil
 import time
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
+from urllib.parse import urlsplit
 
 import httpx
 from protego import Protego
@@ -14,12 +16,16 @@ from integrations.hltv import BASE, parse_schedule
 from integrations.hltv_browser import AGENT, load_page
 from services.health import read, write
 from services.hltv import MATCH_TTL, PROFILE_TTL, HltvCache
+from services.hltv_archive import Archive
 from services.matches import Matches, date
 from services.team_names import team_key
 
 logger = logging.getLogger(__name__)
 MIN_INTERVAL = 30
 DISCOVERY = {BASE + "/matches": 900}
+# Exact profile IDs verified during research; seed the graph even when a scheduled
+# match page is unavailable. Never infer team IDs from fuzzy names.
+ARCHIVE_SEEDS = (BASE + "/team/7020/spirit", BASE + "/team/11861/aurora")
 
 
 def targets(directory, now):
@@ -87,7 +93,7 @@ def next_job(cache, state, matches, names, now):
                 priority = 0 if record in data["upcoming"] else 1
                 jobs.append((max(due, now - 1) if priority else due, record["url"]))
     state["unresolved_teams"] = unresolved
-    due = [(due, address) for due, address in jobs if due <= now]
+    due = [(due, address) for due, address in jobs if due <= now and address not in state.get("blocked_urls", {})]
     return min(due)[1] if due else None
 
 
@@ -101,12 +107,40 @@ async def collect_hltv(directory, browser_slot, loader=load_page, now=None):
     except (OSError, ValueError):
         logger.error("HLTV state unreadable; collection remains stopped")
         return
+    # Migrate the old whole-source pause caused by one denied detail page.
+    # That exact URL stays blocked; it is not retried via a different transport.
+    old_address = state.get("current_url", "")
+    if (
+        state.get("paused")
+        and state.get("http_status") == 403
+        and not str(state.get("error", "")).startswith("HLTV robots.txt")
+        and urlsplit(old_address).path.startswith(("/matches/", "/team/"))
+    ):
+        state.setdefault("blocked_urls", {})[old_address] = state.get("error", "HTTP 403")
+        state.update(paused=False, error=None, http_status=200 if state.get("last_success") else None)
+        write(state_path, state)
     if state.get("paused") or now < state.get("next_request", 0):
         return
     cache = HltvCache(folder)
+    archive = Archive(folder)
+    for blocked, reason in state.get("blocked_urls", {}).items():
+        archive.enqueue([blocked])
+        archive.finish(blocked, now, error=reason, blocked=True)
+    archive.enqueue([BASE + "/results"], 75, refresh_after=21600, now=now)
+    archive.enqueue(ARCHIVE_SEEDS, 50)
     matches, names = targets(directory, now)
     address = next_job(cache, state, matches, names, now)
+    archive_job = archive.next(now)
+    # Reserve every third slot for enrichment/history, even while current pages are due.
+    use_archive = archive_job is not None and (address is None or state.get("completed_requests", 0) % 3 == 2)
+    if use_archive:
+        address = archive_job["url"]
     if address is None:
+        write(state_path, state)
+        return
+    # The server also holds live odds and user data; never fill its remaining disk.
+    if shutil.disk_usage(folder).free < 1024**3:
+        state.update(error="HLTV storage: less than 1 GiB free", next_request=now + 3600)
         write(state_path, state)
         return
     # Persist reservation before waiting for Chrome: a restart cannot bypass the delay.
@@ -126,12 +160,22 @@ async def collect_hltv(directory, browser_slot, loader=load_page, now=None):
                 cache.register(
                     [team for row in entry["data"]["results"] + entry["data"]["upcoming"] for team in row["teams"]]
                 )
-            else:
+            elif entry["data"]["kind"] == "match":
                 cache.register(entry["data"]["teams"])
+        if address not in DISCOVERY:
+            archive.finish(address, fetched_at)
         delay = max(MIN_INTERVAL, Protego.parse(state.get("robots", "")).crawl_delay(AGENT) or 0)
         state.update(last_success=fetched_at, error=None, failures=0, http_status=200, next_request=fetched_at + delay)
     except StopSource as error:
-        state.update(paused=True, error=str(error))
+        robots_failure = str(error).startswith("HLTV robots.txt") and "disallows" not in str(error)
+        if address not in DISCOVERY and not robots_failure:
+            archive.enqueue([address])
+            archive.finish(address, time.time(), error=str(error), blocked=True)
+            state.setdefault("blocked_urls", {})[address] = str(error)
+            state.update(archive_error=str(error), archive_error_url=address, next_request=time.time() + MIN_INTERVAL)
+            state.update(http_status=200 if state.get("last_success") else None, error=None)
+        else:
+            state.update(paused=True, error=str(error))
     except (httpx.HTTPError, ValueError, OSError, KeyError, TypeError) as error:
         code = error.response.status_code if isinstance(error, httpx.HTTPStatusError) else None
         failures = state.get("failures", 0) + 1
@@ -152,7 +196,15 @@ async def collect_hltv(directory, browser_slot, loader=load_page, now=None):
             http_status=code,
         )
         logger.warning("HLTV collection failed: %s", state["error"])
+        if use_archive:
+            archive.finish(address, time.time(), error=state["error"])
+            # A malformed old article doesn't delay live profiles for the whole backoff.
+            # Rate limits remain global and retain Retry-After.
+            if code != 429:
+                state["next_request"] = time.time() + MIN_INTERVAL
     finally:
+        state["completed_requests"] = state.get("completed_requests", 0) + 1
+        state["archive"] = archive.counts()
         write(state_path, state)
 
 
