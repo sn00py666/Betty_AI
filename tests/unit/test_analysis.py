@@ -100,7 +100,7 @@ def test_escaping_and_separate_bookmaker_offers(match):
     assert "<Aurora>" not in text
     assert "&lt;Aurora&gt;" in text
     assert "PARI" not in text
-    assert "PARI: П1 1.50 · П2 2.50" in render_offers(match)
+    assert "PARI: П1 1.50 • П2 2.50" in render_offers(match)
 
 
 def test_dota_does_not_use_rounds_or_map_pool(match):

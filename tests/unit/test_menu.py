@@ -234,10 +234,10 @@ async def test_favorite_survives_odds_button_but_not_changed_match(
     await dispatcher.feed_update(
         bot, incoming(callback="match:" + match["id"]), users=users, matches=matches, analyst=analyst
     )
-    assert "Фаворит AI:" in requests(bot, SendMessage)[-1].text
+    assert "— фаворит против" in requests(bot, SendMessage)[-1].text
     update = incoming(callback="odds:" + match["id"], message_id=10)
     await dispatcher.feed_update(bot, update, users=users, matches=matches)
-    assert "Фаворит AI:" in requests(bot, SendMessage)[-1].text
+    assert "— фаворит против" in requests(bot, SendMessage)[-1].text
     monkeypatch.setattr(matches, "get", lambda _: dict(match, status="live"))
     await dispatcher.feed_update(bot, update, users=users, matches=matches)
     assert "Нет актуального фаворита AI" in requests(bot, SendMessage)[-1].text

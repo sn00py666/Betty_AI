@@ -101,7 +101,17 @@ def test_popularity_order_does_not_change_when_a_match_goes_live(tmp_path, match
 
 def test_team2_favorite_best_price_and_button_order(match):
     text = render_offers(match, "team2")
-    assert "Фаворит AI: <b>NAVI</b>" in text
+    assert text.startswith("<b>NAVI</b> — фаворит против Aurora\n\n")
+    assert "П1 2.40 • П2 1.60" in text
+    assert "Коэффициенты на победителя матча" not in text and "МСК" not in text
+    assert "Сравнение только" not in text
+    assert text.endswith(
+        "<blockquote><i>18+. Не финансовый совет, коэффициент на сайте мог измениться</i></blockquote>"
+    )
+    buttons = menu.offers(match, "team2").inline_keyboard
+    assert "П1 2.40 / П2 1.60" in buttons[0][0].text
+    assert all(b.callback_data != "bonus" for row in buttons for b in row)
+    assert match["offers"][1]["p1"] == 1.6 and match["offers"][1]["p2"] == 2.4
     assert "Лучший коэффициент на фаворита: <b>2.40</b>" in text
     assert "Лучший на Aurora" not in text
     assert menu.offers(match, "team2").inline_keyboard[0][0].url == "https://fon.bet/"

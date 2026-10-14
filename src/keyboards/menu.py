@@ -60,8 +60,9 @@ def offers(match, favorite=None):
     for offer in sorted(match["offers"], key=lambda o: o[side] or 0, reverse=True):
         if offer["p1"] is None and offer["p2"] is None:
             continue
-        p1 = f"{offer['p1']:.2f}" if offer["p1"] else "закрыт"
-        p2 = f"{offer['p2']:.2f}" if offer["p2"] else "закрыт"
+        first_price, second_price = (offer["p2"], offer["p1"]) if favorite == "team2" else (offer["p1"], offer["p2"])
+        p1 = f"{first_price:.2f}" if first_price else "закрыт"
+        p2 = f"{second_price:.2f}" if second_price else "закрыт"
         rows.append(
             [
                 InlineKeyboardButton(
@@ -71,7 +72,6 @@ def offers(match, favorite=None):
                 )
             ]
         )
-    rows.append([InlineKeyboardButton(text="🎁 Бонусы букмекеров", callback_data="bonus")])
     rows.append([InlineKeyboardButton(text="👀 Выбрать матчи", callback_data="matches")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 

@@ -4,11 +4,10 @@ import re
 from datetime import UTC, datetime
 from html import escape
 
-from content import DISCLAIMER
 from services.emojis import bookmaker_name, team_emoji
 from services.factors import factor_summary, factors
 from services.forecasts import favorite_side
-from services.matches import BOOKMAKERS, MOSCOW, date, start_label
+from services.matches import BOOKMAKERS, MOSCOW, start_label
 from services.team_names import canonical_match, canonical_text
 
 
@@ -81,36 +80,37 @@ def render_offers(match, favorite=None):
     match = canonical_match(match)
     favorite = favorite if favorite in ("team1", "team2") else None
     first, second = escape(match["team1"]), escape(match["team2"])
-    lines = [f"<b>{first} vs {second}</b>", "\n<b>Коэффициенты на победителя матча</b>"]
+    lines = []
     if favorite in ("team1", "team2"):
         side = "p1" if favorite == "team1" else "p2"
         available = [o for o in match["offers"] if o[side]]
-        lines.append(f"\nФаворит AI: <b>{escape(match[favorite])}</b>")
+        opponent = second if favorite == "team1" else first
+        lines.extend([f"<b>{escape(match[favorite])}</b> — фаворит против {opponent}", ""])
         if available:
             best_price = max(o[side] for o in available)
             names = ", ".join(
                 bookmaker_name(o["bookmaker"], BOOKMAKERS[o["bookmaker"]]) for o in available if o[side] == best_price
             )
-            lines.append(f"Лучший коэффициент на фаворита: <b>{best_price:.2f}</b> — {names}.")
+            lines.append(f"Лучший коэффициент на фаворита: <b>{best_price:.2f}</b> — {names}")
         else:
             lines.append("Ставки на фаворита сейчас закрыты во всех показанных источниках.")
         lines.append("")
     else:
-        lines.append("\nНет актуального фаворита AI — сравнение обоих исходов.\n")
+        lines.extend([f"<b>{first} vs {second}</b>", "\nНет актуального фаворита AI — сравнение обоих исходов.\n"])
     for offer in match["offers"]:
-        p1 = f"{offer['p1']:.2f}" if offer["p1"] else "закрыт"
-        p2 = f"{offer['p2']:.2f}" if offer["p2"] else "закрыт"
-        updated = date(offer["fetched_at"]).astimezone(MOSCOW).strftime("%H:%M")
+        # П1/П2 follow the displayed heading; the stored bookmaker prices stay intact.
+        first_price, second_price = (offer["p2"], offer["p1"]) if favorite == "team2" else (offer["p1"], offer["p2"])
+        p1 = f"{first_price:.2f}" if first_price else "закрыт"
+        p2 = f"{second_price:.2f}" if second_price else "закрыт"
         name = bookmaker_name(offer["bookmaker"], BOOKMAKERS[offer["bookmaker"]])
-        lines.append(f"{name}: П1 {p1} · П2 {p2} <i>({updated} МСК)</i>")
+        lines.append(f"{name}: П1 {p1} • П2 {p2}")
     sides = () if favorite else (("p1", first), ("p2", second))
     for side, team in sides:
         available = [o for o in match["offers"] if o[side]]
         if available:
             best = max(available, key=lambda o: o[side])
             lines.append(f"\nЛучший на {team}: <b>{best[side]:.2f}</b> — {BOOKMAKERS[best['bookmaker']]}.")
-    lines.append("\nСравнение только среди показанных источников. Коэффициент на сайте мог измениться.")
-    lines.append("\n" + DISCLAIMER)
+    lines.append("\n<blockquote><i>18+. Не финансовый совет, коэффициент на сайте мог измениться</i></blockquote>")
     return prevent_auto_links("\n".join(lines))
 
 
