@@ -44,15 +44,17 @@ def test_requested_card_layout(match):
     text = render(match, Commentary(summary="Перевес Aurora небольшой, матч близкий.", winner="team1", probability=58))
     assert text.startswith('<b><tg-emoji emoji-id="5291987642450228345">🇹🇷</tg-emoji> Aurora vs ')
     assert '<tg-emoji emoji-id="5298896909094657296">🇷🇺</tg-emoji> BETBOOM</b>' in text
-    assert "ESL Pro League · Групповой этап. Bo3" in text
+    assert "ESL Pro League · Групповой этап · Bo3" in text
     assert "<b>Победа Aurora — 58%</b>\n<i>3 фактора за Aurora, 2 нейтральных</i>" in text
-    assert text.index("Победа Aurora") < text.index("Форма против топов") < text.index("Перевес Aurora")
-    assert "На турнире — обе идут со счётом 1-1" in text
-    assert "Личные встречи — 1-0 (Aurora / BETBOOM), слишком мало для выводов" in text
-    assert text.endswith("МСК\nНе является финансовым советом. 18+")
+    assert text.index("Победа Aurora") < text.index("Победы над топ-10") < text.index("Перевес Aurora")
+    assert "На турнире: у обеих 1:1" in text
+    assert "Личные встречи: 1:0, мало матчей" in text
+    assert text.endswith("<blockquote><i>18+. Не является финансовым советом</i></blockquote>")
     for phrase in ("Counter-Strike", "Изменения составов", "доступной выборке", "котиров", "Вероятный исход"):
         assert phrase not in text
-    assert text.count("━━━━━━━━━━━━━━") == 2
+    assert "━━━━━━━━" not in text
+    assert "PandaScore" not in text and "МСК" not in text
+    assert "Рейтинг и топ-10:" not in text
     assert len(text) < 4096
 
 
@@ -72,6 +74,48 @@ def test_counts_factors_for_both_teams(match):
     match["statistics"]["team2"]["winning_round_margin"] = 4
     text = render(match, Commentary(summary="Матч близкий.", winner="team1", probability=55))
     assert "2 фактора за Aurora, 1 фактор за BETBOOM, 2 нейтральных" in text
+    assert text.index("<b>За Aurora</b>") < text.index("<b>За BETBOOM</b>") < text.index("<b>Нейтрально</b>")
+    assert "<b>За BETBOOM</b>\nСредний отрыв в выигранных картах (раунды): +4 против +3" in text
+
+
+def test_grouped_card_with_ranking_and_equal_form(match):
+    match["statistics"] = {
+        "source": "PandaScore", "ranking_source": "Valve VRS",
+        "team1": {
+            "games": 5, "wins": 2, "valve_date": "2026-10-05",
+            "valve_rank": {"rank": 2, "points": 1900}, "top10": {"games": 15, "wins": 9},
+        },
+        "team2": {
+            "games": 5, "wins": 2, "valve_date": "2026-10-05",
+            "valve_rank": {"rank": 36, "points": 1000}, "top10": {"games": 10, "wins": 2},
+        },
+        "head_to_head": {"games": 2, "team1_wins": 1},
+    }
+    text = render(
+        match, Commentary(summary="Рейтинг и победы над топ-10 дают перевес Aurora.", winner="team1", probability=60)
+    )
+    assert "<b>За Aurora</b>\nРейтинг Valve: №2 против №36\nПобеды над топ-10: 9 из 15 против 2 из 10" in text
+    assert "<b>Нейтрально</b>\nПоследние 5 игр: по 2 победы\nЛичные встречи: 1:1\n\n" in text
+    assert "<b>За BETBOOM</b>" not in text
+    assert "PandaScore" not in text and "Valve VRS" not in text and "2026-10-05" not in text
+
+
+def test_team2_favorite_and_different_sample_sizes(match):
+    match["statistics"]["team1"] = {"games": 5, "wins": 2}
+    match["statistics"]["team2"] = {"games": 3, "wins": 2}
+    match["statistics"]["head_to_head"] = {"games": 5, "team1_wins": 1}
+    text = render(match, Commentary(summary="BETBOOM чаще побеждают.", winner="team2", probability=55))
+    assert "<b>За BETBOOM</b>\nПобеды в последних играх: 2 из 3 против 2 из 5\nЛичные встречи: 4:1" in text
+    assert "<b>За Aurora</b>" not in text and "<b>Нейтрально</b>" not in text
+
+
+def test_equal_win_rates_preserve_sample_sizes(match):
+    match["statistics"]["team1"] = {"games": 3, "wins": 2}
+    match["statistics"]["team2"] = {"games": 6, "wins": 4}
+    text = render(match)
+    assert "Победы в последних играх: 2 из 3 против 4 из 6" in text
+    assert "<b>За Aurora</b>" not in text and "<b>За BETBOOM</b>" not in text
+    assert "<b>Нейтрально</b>" in text
 
 
 def test_no_statistics_has_no_market_prediction(match):
@@ -88,7 +132,7 @@ def test_sparse_card_shows_actual_reason_for_prediction(match):
     match["statistics"]["team2"] = {"games": 5, "wins": 3}
     text = render(match, Commentary(summary="Последние результаты Aurora лучше.", winner="team1", probability=55))
     assert "1 фактор за Aurora, 1 нейтральный" in text
-    assert "Последние игры — побед: Aurora — 4/5, BETBOOM — 3/5" in text
+    assert "Последние 5 игр: 4 победы против 3" in text
     assert "Форма против топов" not in text
     assert "На турнире" not in text
     assert "нет данных" not in text and "без данных" not in text

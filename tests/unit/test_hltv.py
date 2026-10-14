@@ -135,7 +135,7 @@ def test_source_fallback_and_reversed_h2h_series(cache, match):
     existing = {"source": "PandaScore", "updated_at": NOW, "team1": {"games": 5, "wins": 4}}
     assert enrich_statistics(existing, context)["team1"]["wins"] == 4
     assert "hltv" not in existing
-    assert "HLTV," in render(match | {"statistics": stats})
+    assert "HLTV," not in render(match | {"statistics": stats})
     assert "PandaScore" not in render(match | {"statistics": stats})
 
 

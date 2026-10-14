@@ -1,13 +1,12 @@
 """Короткая карточка прогноза и отдельное сравнение коэффициентов."""
 
 import re
-from datetime import UTC, datetime
 from html import escape
 
 from services.emojis import bookmaker_name, team_emoji
 from services.factors import factor_summary, factors
 from services.forecasts import favorite_side
-from services.matches import BOOKMAKERS, MOSCOW, start_label
+from services.matches import BOOKMAKERS, start_label
 from services.team_names import canonical_match, canonical_text
 
 
@@ -32,14 +31,12 @@ def render(match, commentary=None):
     }
     tournament = re.sub(r"^(?:Counter-Strike|CS-?2|Dota 2)\.\s*", "", match["tournament"], flags=re.I)
     tournament = re.sub(r"\bBo([135])\b", r"Bo\1", tournament, flags=re.I)
-    tournament = re.sub(r"\.\s+(?!Bo\d+\b)", " · ", tournament, count=1)
+    tournament = re.sub(r"\.\s+", " · ", tournament)
     if match.get("best_of") and not re.search(r"\bBo\d+\b", tournament, re.I):
-        tournament += f". Bo{match['best_of']}"
+        tournament += f" · Bo{match['best_of']}"
     lines = [
         f"<b>{names['team1']} vs {names['team2']}</b>",
         f"{escape(tournament)} · {start_label(match)}",
-        "",
-        "━━━━━━━━━━━━━━",
         "",
     ]
     valid = favorite_side(match, commentary)
@@ -47,12 +44,18 @@ def render(match, commentary=None):
         lines.append(f"<b>Победа {teams[commentary.winner]} — {commentary.probability}%</b>")
     else:
         lines.append("<b>Явного фаворита нет</b>" if commentary and statistics else "<b>Прогноз недоступен</b>")
-    items = [item for item in factors(match) if item["edge"] != "unknown"]
+    items = [item for item in factors(match, compact=True) if item["edge"] != "unknown"]
     winner = commentary.winner if valid else "unclear"
     if items:
         lines.extend([f"<i>{factor_summary(items, winner, teams)}</i>", ""])
-        lines.extend(f"{item['label']} — {escape(item['text'])}" for item in items)
-        lines.append("")
+        sides = (winner, "team2" if winner == "team1" else "team1") if valid else ("team1", "team2")
+        for side in (*sides, "neutral"):
+            group = [item for item in items if item["edge"] == side]
+            if group:
+                title = "Нейтрально" if side == "neutral" else f"За {teams[side]}"
+                lines.append(f"<b>{title}</b>")
+                lines.extend(escape(item["text"]) for item in group)
+                lines.append("")
     else:
         lines.append("")
     if commentary and statistics:
@@ -61,18 +64,7 @@ def render(match, commentary=None):
         lines.append("AI-разбор сейчас недоступен. Показаны подтверждённые факторы матча.")
     else:
         lines.append("Разбор этого матча пока не сформирован.")
-    lines.extend(["", "━━━━━━━━━━━━━━"])
-    if statistics:
-        updated = datetime.fromtimestamp(statistics["updated_at"], UTC).astimezone(MOSCOW).strftime("%d.%m %H:%M")
-        source = statistics.get("source", "PandaScore")
-        lines.append(f"{escape(source)}, {updated} МСК")
-        if statistics.get("hltv") and source != "HLTV":
-            hltv_updated = min(t["fetched_at"] for t in statistics["hltv"]["teams"].values())
-            stamp = datetime.fromtimestamp(hltv_updated, UTC).astimezone(MOSCOW).strftime("%d.%m %H:%M")
-            lines.append(f"HLTV, {stamp} МСК")
-        if statistics.get("ranking_source"):
-            lines.append("Рейтинг и топ-10: Valve VRS")
-    lines.append("Не является финансовым советом. 18+")
+    lines.extend(["", "<blockquote><i>18+. Не является финансовым советом</i></blockquote>"])
     return prevent_auto_links("\n".join(lines))
 
 
