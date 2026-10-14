@@ -47,11 +47,11 @@ def navigation():
     return keyboard([("👀 Выбрать матчи", "matches"), ("🎁 Бонусы букмекеров", "bonus")])
 
 
-def match_actions(match):
-    buttons = [("Обновить разбор", f"match:{match['id']}"), ("Сравнить коэффициенты", f"odds:{match['id']}")]
+def match_actions(match, reminder_set=False):
     if match.get("starts_at") and match["status"] == "prematch":
-        buttons.append(("🔔 Напомнить за 30 минут", f"remind:{match['id']}"))
-    return keyboard([*buttons, ("👀 Выбрать матчи", "matches")])
+        text = "✅ Напоминание установлено" if reminder_set else "🔔 Напомнить за 30 минут"
+        return keyboard([(text, f"remind:{match['id']}")])
+    return None
 
 
 def offers(match, favorite=None):

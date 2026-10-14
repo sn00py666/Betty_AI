@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock
 import pytest
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
-from aiogram.methods import AnswerCallbackQuery, EditMessageText, SendAnimation, SendMessage
+from aiogram.methods import AnswerCallbackQuery, EditMessageReplyMarkup, EditMessageText, SendAnimation, SendMessage
 from aiogram.types import Message, Update
 
 from config import Settings
@@ -127,12 +127,15 @@ async def test_real_analysis_then_actual_bookmaker_link(dispatcher, bot, users, 
     assert "Прогноз недоступен" in requests(bot, EditMessageText)[0].text
     assert requests(bot, SendMessage)[0].text == "Анализирую текущую форму команд…"
     assert "80 000" not in requests(bot, EditMessageText)[0].text
+    rows = requests(bot, EditMessageText)[0].reply_markup.inline_keyboard
+    assert len(rows) == 1 and len(rows[0]) == 1
+    assert rows[0][0].text == "🔔 Напомнить за 30 минут"
     menu.asyncio.sleep.assert_awaited_once_with(6)
     offers = requests(bot, SendMessage)[-1]
     assert offers.reply_markup.inline_keyboard[0][0].url == "https://pari.ru/sports/10"
 
 
-@pytest.mark.parametrize("callback", ["match:missing", "sport:missing", "offer:0"])
+@pytest.mark.parametrize("callback", ["match:missing", "sport:missing", "offer:0", "remind:missing"])
 async def test_stale_buttons(dispatcher, bot, users, matches, analyst, callback):
     await dispatcher.feed_update(bot, incoming(callback=callback), users=users, matches=matches, analyst=analyst)
     assert requests(bot, AnswerCallbackQuery)[0].show_alert
@@ -151,6 +154,37 @@ async def test_disable_notifications_clears_reminders(dispatcher, bot, users):
     users.update(42, notifications=True, reminders={"a": {}})
     await dispatcher.feed_update(bot, incoming(callback="notifications:off"), users=users)
     assert not users.get(42)["notifications"] and not users.get(42)["reminders"]
+
+
+async def test_reminder_edits_card_and_remains_confirmed_when_reopened(dispatcher, bot, users, matches, analyst):
+    match = matches.read()[0]
+    update = incoming(callback="remind:" + match["id"])
+    await dispatcher.feed_update(bot, update, users=users, matches=matches)
+    saved = Users(users.path).get(42)["reminders"]
+    assert saved[match["id"]]["starts_at"] == match["starts_at"]
+    edits = requests(bot, EditMessageReplyMarkup)
+    assert len(edits) == 1 and edits[0].message_id == 1
+    markup = edits[0].reply_markup
+    assert len(markup.inline_keyboard) == 1
+    assert markup.inline_keyboard[0][0].text == "✅ Напоминание установлено"
+    assert not requests(bot, SendMessage) and not requests(bot, EditMessageText)
+    # Повторное нажатие не редактирует уже подтверждённую кнопку и не дублирует напоминание.
+    data = update.model_dump()
+    data["callback_query"]["message"]["reply_markup"] = markup.model_dump()
+    update = Update.model_validate(data)
+    await dispatcher.feed_update(bot, update, users=users, matches=matches)
+    assert len(requests(bot, EditMessageReplyMarkup)) == 1
+    assert users.get(42)["reminders"] == saved
+    await dispatcher.feed_update(
+        bot, incoming(callback="match:" + match["id"]), users=users, matches=matches, analyst=analyst
+    )
+    assert requests(bot, EditMessageText)[0].reply_markup.model_dump() == markup.model_dump()
+
+
+@pytest.mark.parametrize("changes", [{"status": "live"}, {"starts_at": None}])
+def test_analysis_without_reminder_has_no_buttons(changes):
+    match = {"id": "a", "status": "prematch", "starts_at": "2026-10-15T13:00:00+00:00"} | changes
+    assert menu.menu.match_actions(match) is None
 
 
 async def test_menu_does_not_respond_in_groups(dispatcher, bot, users):

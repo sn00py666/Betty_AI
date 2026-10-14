@@ -153,7 +153,8 @@ async def open_match(callback: CallbackQuery, users: Users, matches: Matches, an
     fresh["statistics"] = match.get("statistics")
     if facts(fresh) != facts(match):
         commentary = None
-    await pending.edit_text(render(fresh, commentary), reply_markup=menu.match_actions(fresh))
+    reminder_set = match_id in users.get(callback.from_user.id).get("reminders", {})
+    await pending.edit_text(render(fresh, commentary), reply_markup=menu.match_actions(fresh, reminder_set))
     forecast = remember(users, callback.from_user.id, pending.message_id, fresh, commentary)
     await asyncio.sleep(6)
     if fresh := matches.get(match_id):
@@ -205,7 +206,15 @@ async def remind(callback: CallbackQuery, users: Users, matches: Matches):
         return
     reminders[match["id"]] = {"starts_at": match["starts_at"], "title": f"{match['team1']} vs {match['team2']}"}
     users.update(callback.from_user.id, reminders=reminders)
-    await callback.answer("Напомню за 30 минут. Отключить: /notifications", show_alert=True)
+    await callback.answer("Напоминание установлено")
+    markup = menu.match_actions(match, reminder_set=True)
+    current = callback.message.reply_markup
+    if current is None or current.model_dump() != markup.model_dump():
+        try:
+            await callback.message.edit_reply_markup(reply_markup=markup)
+        except TelegramBadRequest as error:
+            if "message is not modified" not in error.message.lower():
+                raise
 
 
 @router.callback_query(F.data == "bonus")
