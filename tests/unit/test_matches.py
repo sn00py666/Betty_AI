@@ -176,6 +176,87 @@ def test_live_matches_precede_earlier_upcoming_and_unknown_times(tmp_path):
     assert [r["starts_at"] for r in rows] == [data["matches"][i]["starts_at"] for i in (3, 2, 1, 0)]
 
 
+def test_nuclear_fokus_live_merges_four_sources_without_start_times(tmp_path):
+    # Реальный случай: Фонбет/PARI знают время, Леон/Марафон его не передают.
+    common = dict(team1="Nuclear TigeRES", team2="FOKUS", status="live")
+    snapshot(tmp_path, "fonbet", **common, url="https://fon.bet/live")
+    snapshot(tmp_path, "pari", **common)
+    snapshot(
+        tmp_path,
+        "leon",
+        status="live",
+        team1="FOKUS",
+        team2="Nuclear Tigeres",
+        starts_at=None,
+        best_of=None,
+        p1=1.8,
+        p2=2.0,
+        tournament="PGL Bucharest Open Qualifier",
+    )
+    snapshot(
+        tmp_path,
+        "marathon",
+        **common,
+        starts_at=None,
+        tournament="CS 2. PGL. Бухарест. Открытая квалификация. Матч из 3-х карт",
+    )
+    rows = Matches(tmp_path).read(NOW)
+    assert len(rows) == 1
+    assert rows[0]["team1"] == "Nuclear TigeRES"
+    offers = {offer["bookmaker"]: offer for offer in rows[0]["offers"]}
+    assert set(offers) == {"fonbet", "pari", "leon", "marathon"}
+    assert (offers["leon"]["p1"], offers["leon"]["p2"]) == (2.0, 1.8)
+    assert rows[0]["starts_at"] is not None
+
+
+def test_live_pair_merges_when_neither_source_knows_start(tmp_path):
+    snapshot(tmp_path, "leon", status="live", starts_at=None, best_of=None)
+    snapshot(tmp_path, "marathon", status="live", starts_at=None)
+    rows = Matches(tmp_path).read(NOW)
+    assert len(rows) == 1
+    assert len(rows[0]["offers"]) == 2
+
+
+@pytest.mark.parametrize("conflict", ["start", "best_of", "bookmaker"])
+def test_unknown_live_fields_do_not_bridge_conflicting_events(tmp_path, conflict):
+    snapshot(tmp_path, "leon", status="live", starts_at=None, best_of=None)
+    snapshot(tmp_path, "fonbet", status="live", url="https://fon.bet/live")
+    changes = {"status": "live"}
+    if conflict == "start":
+        changes["starts_at"] = (NOW + timedelta(hours=4)).isoformat()
+    elif conflict == "best_of":
+        changes["best_of"] = 5
+    if conflict == "bookmaker":
+        path = tmp_path / "fonbet" / "latest.json"
+        data = json.loads(path.read_text())
+        data["matches"].append(dict(data["matches"][0], id="second-event"))
+        path.write_text(json.dumps(data))
+    else:
+        snapshot(tmp_path, "pari", **changes)
+    assert len(Matches(tmp_path).read(NOW)) == 3
+
+
+def test_live_fallback_never_merges_prematch_or_other_discipline(tmp_path):
+    snapshot(tmp_path, "leon", status="live", starts_at=None)
+    snapshot(tmp_path, "marathon", status="prematch", starts_at=None)
+    snapshot(tmp_path, "pari", status="live", sport="dota2", starts_at=None)
+    assert len(Matches(tmp_path).read(NOW)) == 3
+
+
+def test_stale_live_offer_is_excluded_from_merged_match(tmp_path):
+    snapshot(tmp_path, "leon", status="live", starts_at=None)
+    snapshot(
+        tmp_path,
+        "marathon",
+        status="live",
+        starts_at=None,
+        fetched_at=(NOW - timedelta(seconds=LIVE_TTL + 1)).isoformat(),
+    )
+    rows = Matches(tmp_path).read(NOW)
+    assert len(rows) == 1
+    assert [offer["bookmaker"] for offer in rows[0]["offers"]] == ["leon"]
+
+
 def test_hltv_names_normalized_before_merging_sources(tmp_path):
     snapshot(tmp_path, "pari", team1="Ninjas in Pyjamas", team2="BB Team")
     snapshot(tmp_path, "fonbet", team1="BETBOOM", team2="NIP", p1=1.6, p2=2.6, url="https://fon.bet/sports/10")

@@ -20,6 +20,7 @@ class RankingSettings(BaseSettings):
     valve_rankings_enabled: bool = True
     dota_opendota_enabled: bool = True
     dota_cyberscore_enabled: bool = True
+    hltv_enabled: bool = True
 
 
 class Settings(RankingSettings):

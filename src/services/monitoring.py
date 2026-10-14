@@ -204,6 +204,24 @@ class Monitor:
                     detail += "; сбор рейтинга не начался"
             add(name, code, detail)
 
+        hltv = load(self.directory / "hltv" / "state.json", "HLTV")
+        if hltv is not None:
+            code = classify(hltv) if self.settings.hltv_enabled else "disabled"
+            if self.settings.hltv_enabled and not hltv:
+                code = "idle"
+            if code == "ok" and hltv.get("last_success", 0) < now - 12 * 3600:
+                code = "stale"
+            detail = f"Последнее обновление {stamp(hltv.get('last_success'))}"
+            if hltv.get("error"):
+                detail += f"; {hltv['error']}"
+            if hltv.get("paused"):
+                detail += "; остановлен до ручной проверки"
+                if code == "ok":
+                    code = "blocked"
+            if hltv.get("unresolved_teams"):
+                detail += f"; не сопоставлено команд: {len(hltv['unresolved_teams'])}"
+            add("HLTV", code, detail)
+
         sources = enabled_sources(self.settings)
         states = {source: load_source(self.directory, source) for source in sources}
         selected, teams, cached = select_ranking(self.directory, sources, now, states)

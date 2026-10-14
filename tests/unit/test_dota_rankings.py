@@ -129,7 +129,7 @@ def test_corrupt_cache_never_breaks_sorting(tmp_path, value):
     assert select_ranking(tmp_path) == (None, {}, False)
 
 
-def test_dota_sorting_uses_one_provider_live_first_and_never_cs2_rating(tmp_path):
+def test_dota_sorting_mixes_statuses_by_dota_rating_only(tmp_path):
     now = time.time()
     cache(tmp_path, "cyberscore", now)
     write(
@@ -153,11 +153,11 @@ def test_dota_sorting_uses_one_provider_live_first_and_never_cs2_rating(tmp_path
         match("ranked", "Team Spirit", hours=1),
         match("live", "Unknown", status="live"),
     ]
-    assert [m["id"] for m in sort_matches(matches, "popular", tmp_path / "valve.json")] == ["live", "ranked", "unknown"]
+    assert [m["id"] for m in sort_matches(matches, "popular", tmp_path / "valve.json")] == ["ranked", "unknown", "live"]
     assert [m["id"] for m in sort_matches(matches, "time", tmp_path / "valve.json")] == ["live", "unknown", "ranked"]
     assert [m["id"] for m in sort_matches(matches, "popular", tmp_path / "valve.json", dota_ranks={})] == [
-        "live",
         "unknown",
+        "live",
         "ranked",
     ]
 
@@ -249,6 +249,7 @@ def monitor_settings(**changes):
         ai_api_key=None,
         pandascore_daily_limit=100,
         valve_rankings_enabled=False,
+        hltv_enabled=False,
         dota_opendota_enabled=True,
         dota_cyberscore_enabled=True,
         **changes,
@@ -325,7 +326,7 @@ def test_first_request_in_progress_has_grace_even_if_monitor_already_running(tmp
 async def test_collector_starts_independent_enabled_ranking_workers(tmp_path, monkeypatch):
     started, ready = [], asyncio.Event()
 
-    async def worker(*args):
+    async def worker(*args, **kwargs):
         started.append(args)
         if len(started) == 4:
             ready.set()
@@ -335,7 +336,9 @@ async def test_collector_starts_independent_enabled_ranking_workers(tmp_path, mo
     monkeypatch.setattr(
         collect,
         "RankingSettings",
-        lambda: SimpleNamespace(valve_rankings_enabled=False, dota_opendota_enabled=True, dota_cyberscore_enabled=True),
+        lambda: SimpleNamespace(
+            valve_rankings_enabled=False, dota_opendota_enabled=True, dota_cyberscore_enabled=True, hltv_enabled=False
+        ),
     )
     monkeypatch.setattr(collect, "heartbeat", lambda *args, **kwargs: worker("heartbeat"))
     monkeypatch.setattr(collect, "collect_loop", worker)

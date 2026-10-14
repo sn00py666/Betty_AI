@@ -4,6 +4,7 @@ import hashlib
 import json
 import logging
 from datetime import UTC, datetime, timedelta
+from itertools import combinations
 from pathlib import Path
 from statistics import median
 from urllib.parse import urlsplit
@@ -35,7 +36,7 @@ def date(value):
         return None
 
 
-def compatible(left, right):
+def compatible(left, right, *, allow_unknown_live=False):
     if left["sport"] != right["sport"] or left["status"] != right["status"]:
         return False
     if sorted(left["teams"]) != sorted(right["teams"]):
@@ -45,8 +46,42 @@ def compatible(left, right):
     a, b = date(left.get("starts_at")), date(right.get("starts_at"))
     if a and b:
         return abs((a - b).total_seconds()) <= 300
-    # Без точного времени не объединяем разные события на основании одних имён.
-    return False
+    return allow_unknown_live and left["status"] == "live"
+
+
+def group_events(rows):
+    """Сначала точные даты, затем однозначные пары среди свежих LIVE-записей."""
+    groups = []
+    for row in rows:
+        candidates = [g for g in groups if all(compatible(member, row) for member in g)]
+        group = candidates[0] if len(candidates) == 1 else None
+        if group and any(member["bookmaker"] == row["bookmaker"] for member in group):
+            group = None
+        if group is None:
+            groups.append([row])
+        else:
+            group.append(row)
+
+    live_pairs = {}
+    for index, group in enumerate(groups):
+        first = group[0]
+        if first["status"] == "live":
+            key = first["sport"], tuple(sorted(first["teams"]))
+            live_pairs.setdefault(key, []).append(index)
+    for indices in live_pairs.values():
+        if len(indices) < 2:
+            continue
+        members = [row for index in indices for row in groups[index]]
+        # Две записи одной пары у одного букмекера означают неоднозначность.
+        # Проверяем все записи, чтобы отсутствующие время/BO не скрыли конфликт.
+        if len({row["bookmaker"] for row in members}) != len(members):
+            continue
+        if not all(compatible(a, b, allow_unknown_live=True) for a, b in combinations(members, 2)):
+            continue
+        groups[indices[0]] = members
+        for index in indices[1:]:
+            groups[index] = []
+    return [group for group in groups if group]
 
 
 def start_label(match, now=None):
@@ -122,27 +157,24 @@ class Matches:
         # Точные даты первыми; одинаковый порядок сохраняет идентификатор при обновлении цен.
         rows.sort(key=lambda row: (not bool(date(row.get("starts_at"))), row["bookmaker"], row["id"]))
         groups = []
-        for row in rows:
-            candidates = [g for g in groups if compatible(g, row)]
-            group = candidates[0] if len(candidates) == 1 else None
-            if group and any(o["bookmaker"] == row["bookmaker"] for o in group["offers"]):
-                group = None
-            if group is None:
-                identity = f"{row['sport']}:{row['bookmaker']}:{row['id']}"
-                group = {**row, "id": hashlib.sha256(identity.encode()).hexdigest()[:16], "offers": []}
-                groups.append(group)
-            p1, p2 = row["p1"], row["p2"]
-            if row["teams"] != group["teams"]:
-                p1, p2 = p2, p1
-            group["offers"].append(
-                {
-                    "bookmaker": row["bookmaker"],
-                    "p1": p1,
-                    "p2": p2,
-                    "url": row["url"],
-                    "fetched_at": row["fetched_at"],
-                }
-            )
+        for members in group_events(rows):
+            first = members[0]
+            identity = f"{first['sport']}:{first['bookmaker']}:{first['id']}"
+            group = {**first, "id": hashlib.sha256(identity.encode()).hexdigest()[:16], "offers": []}
+            groups.append(group)
+            for row in members:
+                p1, p2 = row["p1"], row["p2"]
+                if row["teams"] != group["teams"]:
+                    p1, p2 = p2, p1
+                group["offers"].append(
+                    {
+                        "bookmaker": row["bookmaker"],
+                        "p1": p1,
+                        "p2": p2,
+                        "url": row["url"],
+                        "fetched_at": row["fetched_at"],
+                    }
+                )
         return sorted(groups, key=match_order)
 
     def get(self, match_id):

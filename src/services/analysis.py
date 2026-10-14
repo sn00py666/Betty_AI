@@ -65,7 +65,12 @@ def render(match, commentary=None):
     lines.extend(["", "━━━━━━━━━━━━━━"])
     if statistics:
         updated = datetime.fromtimestamp(statistics["updated_at"], UTC).astimezone(MOSCOW).strftime("%d.%m %H:%M")
-        lines.append(f"PandaScore, {updated} МСК")
+        source = statistics.get("source", "PandaScore")
+        lines.append(f"{escape(source)}, {updated} МСК")
+        if statistics.get("hltv") and source != "HLTV":
+            hltv_updated = min(t["fetched_at"] for t in statistics["hltv"]["teams"].values())
+            stamp = datetime.fromtimestamp(hltv_updated, UTC).astimezone(MOSCOW).strftime("%d.%m %H:%M")
+            lines.append(f"HLTV, {stamp} МСК")
         if statistics.get("ranking_source"):
             lines.append("Рейтинг и топ-10: Valve VRS")
     lines.append("Не является финансовым советом. 18+")

@@ -1,4 +1,4 @@
-"""Порядок матчей: LIVE, рейтинг дисциплины, охват источников, время."""
+"""Популярность: рейтинг дисциплины, охват источников, время; без приоритета LIVE."""
 
 from datetime import UTC, datetime
 
@@ -28,7 +28,7 @@ def sort_matches(items, mode, rankings_path, *, dota_ranks=None):
         key = team_key if match["sport"] == "cs2" else dota_team_key
         teams = sorted(ranking.get(key(match[side]), {}).get("rank", 10000) for side in ("team1", "team2"))
         coverage = len({o["bookmaker"] for o in match["offers"]})
-        live, starts, name = match_order(match)
-        return live, *teams, -coverage, starts, name
+        _, starts, name = match_order(match)
+        return *teams, -coverage, starts, name
 
     return sorted(items, key=order)

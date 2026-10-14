@@ -24,6 +24,16 @@ def factors(match):
             second["wins"] / games_b,
         )
 
+    hltv = stats.get("hltv", {}).get("teams", {})
+    ranks = [hltv.get(side, {}).get("rankings", {}).get("hltv") for side in ("team1", "team2")]
+    if all(ranks) and ranks[0]["url"].split("/details/")[0] == ranks[1]["url"].split("/details/")[0]:
+        add(
+            "Рейтинг HLTV",
+            f"{a} — №{ranks[0]['rank']}, {b} — №{ranks[1]['rank']}",
+            -ranks[0]["rank"],
+            -ranks[1]["rank"],
+        )
+
     top_a, top_b = first.get("top10", {}), second.get("top10", {})
     rank_a, rank_b = first.get("valve_rank"), second.get("valve_rank")
     if rank_a and rank_b and first.get("valve_date") == second.get("valve_date"):

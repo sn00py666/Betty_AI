@@ -185,8 +185,8 @@ async def test_pagination_has_five_matches_and_edits_same_message(dispatcher, bo
     assert [b.callback_data for b in rows[5]] == ["page_current", "page:cs2:1"]
 
 
-async def test_live_matches_fill_first_pages_before_upcoming(dispatcher, bot, users, matches, monkeypatch):
-    users.update(42, sport="cs2")
+async def test_time_sort_keeps_live_matches_on_first_pages(dispatcher, bot, users, matches, monkeypatch):
+    users.update(42, sport="cs2", match_sort="time")
     base = matches.read()[0]
     upcoming = [dict(base, id=f"prematch-{i}", status="prematch") for i in range(6)]
     live = [dict(base, id=f"live-{i}", status="live", starts_at=None) for i in range(7)]

@@ -39,7 +39,7 @@ def match():
     )
 
 
-def test_popularity_uses_current_ranking_but_keeps_live_first(tmp_path, match):
+def test_popularity_mixes_live_and_prematch_by_rank(tmp_path, match):
     now = datetime.now(UTC)
     path = tmp_path / "valve.json"
     path.write_text(
@@ -60,15 +60,43 @@ def test_popularity_uses_current_ranking_but_keeps_live_first(tmp_path, match):
     unknown = dict(match, id="unknown", team1="Other", team2="Unknown", starts_at=now.isoformat())
     live = dict(unknown, id="live", status="live")
     items = [unknown, match, live]
-    assert [m["id"] for m in sort_matches(items, "popular", path)] == ["live", "test", "unknown"]
+    assert [m["id"] for m in sort_matches(items, "popular", path)] == ["test", "unknown", "live"]
     assert [m["id"] for m in sort_matches(items, "time", path)] == ["live", "unknown", "test"]
     path.write_text(json.dumps({"snapshots": {"old": {"date": "2000-01-01", "teams": {"navi": {"rank": 1}}}}}))
-    assert [m["id"] for m in sort_matches(items, "popular", path)] == ["live", "unknown", "test"]
+    assert [m["id"] for m in sort_matches(items, "popular", path)] == ["unknown", "live", "test"]
 
 
 def test_popularity_uses_unique_bookmakers_when_no_rank(tmp_path, match):
-    other = dict(match, id="other", offers=[match["offers"][0]] * 3)
+    other = dict(match, id="other", status="live", offers=[match["offers"][0]] * 3)
     assert sort_matches([other, match], "popular", tmp_path / "absent.json")[0]["id"] == "test"
+
+
+@pytest.mark.parametrize("live_id", ["top", "middle", "unknown"])
+def test_popularity_order_does_not_change_when_a_match_goes_live(tmp_path, match, live_id):
+    path = tmp_path / "valve.json"
+    path.write_text(
+        json.dumps(
+            {
+                "snapshots": {
+                    "current": {
+                        "date": datetime.now(UTC).date().isoformat(),
+                        "teams": {"navi": {"rank": 2}, "aurora": {"rank": 10}},
+                    }
+                }
+            }
+        )
+    )
+    items = [
+        dict(match, id="unknown", team1="Other", team2="Unknown"),
+        dict(match, id="middle", team1="Aurora", team2="Unknown"),
+        dict(match, id="top", team1="NAVI", team2="Unknown"),
+    ]
+    expected = ["top", "middle", "unknown"]
+    assert [m["id"] for m in sort_matches(items, "popular", path)] == expected
+    for item in items:
+        if item["id"] == live_id:
+            item.update(status="live", starts_at=None)
+    assert [m["id"] for m in sort_matches(items, "popular", path)] == expected
 
 
 def test_team2_favorite_best_price_and_button_order(match):

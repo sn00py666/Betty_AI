@@ -33,6 +33,7 @@ from services.collection_schedule import (
 from services.dota_rankings import enabled_sources, run_dota_rankings
 from services.freshness import LIVE_TTL, PREMATCH_TTL
 from services.health import heartbeat
+from services.hltv_collection import run_hltv
 from services.rankings import run_rankings
 
 DATA = Path(__file__).resolve().parent.parent / "data" / "odds"
@@ -269,7 +270,8 @@ async def collect_one(name, client, directory=DATA):
         if not sports and not live_only:
             state["last_full_success"] = fetched
         snapshots = schedule_snapshots(directory)
-        active = hot_sports(snapshots, fetched) if name in LIVE_SOURCES else set()
+        # ISO timestamps round to microseconds and can be just ahead of the raw float.
+        active = hot_sports(snapshots, time.time()) if name in LIVE_SOURCES else set()
         delay = (
             FAST_INTERVAL
             if active
@@ -325,7 +327,7 @@ async def collect_one(name, client, directory=DATA):
         save_json(state_path, state)
 
 
-async def collect_loop(names, watch):
+async def collect_loop(names, watch, *, hltv_enabled=False):
     async with httpx.AsyncClient(
         timeout=30,
         follow_redirects=False,
@@ -348,13 +350,15 @@ async def collect_loop(names, watch):
         async with asyncio.TaskGroup() as group:
             for name in names:
                 group.create_task(worker(name))
+            if watch and hltv_enabled:
+                group.create_task(run_hltv(DATA.parent, browser_slot))
 
 
 async def run(names, watch):
     settings = RankingSettings()
     tasks = [
         asyncio.create_task(heartbeat(DATA.parent / "health" / "collector.json", sources=names)),
-        asyncio.create_task(collect_loop(names, watch)),
+        asyncio.create_task(collect_loop(names, watch, hltv_enabled=settings.hltv_enabled)),
     ]
     if settings.valve_rankings_enabled:
         tasks.append(asyncio.create_task(run_rankings(DATA.parent / "valve.json")))

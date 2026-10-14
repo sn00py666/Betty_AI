@@ -20,6 +20,7 @@ def settings():
         ai_api_key="test",
         pandascore_daily_limit=100,
         valve_rankings_enabled=True,
+        hltv_enabled=False,
     )
 
 
