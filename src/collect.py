@@ -17,7 +17,7 @@ from urllib.parse import urlsplit
 import httpx
 from protego import Protego
 
-from config import RankingSettings
+from config import AISettings
 from integrations.bookmakers import LIVE_URLS, SOURCES, parse_response
 from integrations.browser import BROWSER_URLS, load_rendered, load_winline
 from integrations.errors import StopSource
@@ -35,6 +35,7 @@ from services.freshness import LIVE_TTL, PREMATCH_TTL
 from services.health import heartbeat
 from services.hltv_collection import run_hltv
 from services.rankings import run_rankings
+from services.team_matching import run_team_matching
 
 DATA = Path(__file__).resolve().parent.parent / "data" / "odds"
 # Профиль Chrome 154 на macOS (версия установленного Chrome при настройке).
@@ -355,11 +356,13 @@ async def collect_loop(names, watch, *, hltv_enabled=False):
 
 
 async def run(names, watch):
-    settings = RankingSettings()
+    settings = AISettings()
     tasks = [
         asyncio.create_task(heartbeat(DATA.parent / "health" / "collector.json", sources=names)),
         asyncio.create_task(collect_loop(names, watch, hltv_enabled=settings.hltv_enabled)),
     ]
+    if watch and settings.team_matching_enabled:
+        tasks.append(asyncio.create_task(run_team_matching(settings, DATA.parent)))
     if settings.valve_rankings_enabled:
         tasks.append(asyncio.create_task(run_rankings(DATA.parent / "valve.json")))
     for source in enabled_sources(settings):

@@ -25,6 +25,9 @@ def start_time(label, captured_at, timezone="Europe/Moscow"):
             days=int(days[1]) if days else 0, hours=int(hours[1]) if hours else 0, minutes=int(minutes[1])
         )
         start = anchor + delta
+        # На сайте показаны полные оставшиеся минуты; точный старт находится в следующей минуте.
+        if start.second or start.microsecond:
+            start = (start + timedelta(minutes=1)).replace(second=0, microsecond=0)
     else:
         clock = re.search(r"(\d{1,2}):(\d{2})", label)
         if not clock:

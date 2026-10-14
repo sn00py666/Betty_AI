@@ -137,6 +137,80 @@ def test_envy_alias_merges_bookmakers_with_seconds_difference(tmp_path):
     assert [(o["p1"], o["p2"]) for o in rows[0]["offers"]] == [(1.6, 2.6), (1.5, 2.5)]
 
 
+def test_yakult_novus_merges_and_prefers_scheduled_time(tmp_path):
+    from services.matches import start_label
+
+    start = NOW + timedelta(hours=2)
+    snapshot(
+        tmp_path, "leon", sport="dota2", team1="Yakult Brothers", team2="Novus", best_of=None,
+        starts_at=(start - timedelta(seconds=48)).isoformat(), start_label="Начало через 1 час 59 мин.",
+    )
+    snapshot(
+        tmp_path, "winline", sport="dota2", team1="YAKULT BROTHERS", team2="NOVUS GAMING", best_of=None,
+        starts_at=start.isoformat(), start_label="Завтра 01:00", p1=1.45, p2=2.56,
+    )
+    rows = Matches(tmp_path).read(NOW)
+    assert len(rows) == 1
+    assert rows[0]["starts_at"] == start.isoformat()
+    assert start_label(rows[0], NOW) == "завтра 01:00"
+    assert [(o["p1"], o["p2"]) for o in rows[0]["offers"]] == [(2.5, 1.5), (1.45, 2.56)]
+
+
+def test_countdown_only_display_never_keeps_previous_minute(tmp_path):
+    from services.matches import start_label
+
+    snapshot(tmp_path, "leon", starts_at="2026-10-05T01:59:12Z", start_label="Начало через 5 часов 59 мин.")
+    rows = Matches(tmp_path).read(NOW)
+    assert start_label(rows[0], NOW) == "завтра 05:00"
+
+
+@pytest.mark.parametrize("reversed_order", [False, True])
+def test_unlisted_branding_variant_keeps_price_orientation(tmp_path, reversed_order):
+    snapshot(tmp_path, "leon", team1="Newcomers", team2="Opponent")
+    names = ("Opponent", "Newcomers Gaming") if reversed_order else ("Newcomers Gaming", "Opponent")
+    snapshot(tmp_path, "winline", team1=names[0], team2=names[1], p1=1.8, p2=2.2)
+    rows = Matches(tmp_path).read(NOW)
+    assert len(rows) == 1
+    assert (rows[0]["team1"], rows[0]["team2"]) == ("Newcomers", "Opponent")
+    offer = next(o for o in rows[0]["offers"] if o["bookmaker"] == "winline")
+    assert (offer["p1"], offer["p2"]) == ((2.2, 1.8) if reversed_order else (1.8, 2.2))
+
+
+@pytest.mark.parametrize("changes", [
+    {"team1": "Newcomers Academy"}, {"team1": "Newcomers Junior"}, {"team1": "Newcomers II"},
+    {"team1": "Newcomers Women"}, {"team1": "Newcomers NXT"}, {"team1": "ex-Newcomers"},
+    {"sport": "dota2"}, {"status": "live"}, {"starts_at": None}, {"best_of": 5},
+    {"starts_at": (NOW + timedelta(hours=3)).isoformat()}, {"team2": "Other Opponent"},
+    {"team2": "Opponent Gaming"},  # Обе команды требуют догадки: нет точного соперника.
+])
+def test_branding_match_requires_unambiguous_event_context(tmp_path, changes):
+    snapshot(tmp_path, "leon", team1="Newcomers", team2="Opponent")
+    candidate = dict(team1="Newcomers Gaming", team2="Opponent") | changes
+    snapshot(tmp_path, "winline", **candidate)
+    assert len(Matches(tmp_path).read(NOW)) == 2
+
+
+def test_branding_does_not_choose_between_two_events_at_one_bookmaker(tmp_path):
+    snapshot(tmp_path, "leon", team1="Newcomers", team2="Opponent")
+    data = snapshot(tmp_path, "winline", team1="Newcomers Gaming", team2="Opponent")
+    data["matches"].append(dict(data["matches"][0], id="second"))
+    (tmp_path / "winline" / "latest.json").write_text(json.dumps(data))
+    assert len(Matches(tmp_path).read(NOW)) == 3
+
+
+def test_branding_does_not_bridge_conflicting_start_times(tmp_path):
+    snapshot(tmp_path, "leon", team1="Newcomers", team2="Opponent")
+    snapshot(
+        tmp_path, "marathon", team1="Newcomers Gaming", team2="Opponent",
+        starts_at=(NOW + timedelta(hours=2, minutes=4)).isoformat(),
+    )
+    snapshot(
+        tmp_path, "winline", team1="Newcomers Esports", team2="Opponent",
+        starts_at=(NOW + timedelta(hours=2, minutes=8)).isoformat(),
+    )
+    assert len(Matches(tmp_path).read(NOW)) == 3
+
+
 def test_chronological_order_puts_unknown_times_last(tmp_path):
     data = snapshot(tmp_path, "pari")
     original = data["matches"][0]

@@ -12,7 +12,8 @@ from zoneinfo import ZoneInfo
 
 from integrations.bookmakers import SOURCES, price
 from services.freshness import LIVE_TTL, PREMATCH_TTL
-from services.team_names import canonical_name, team_key
+from services.team_aliases import accepted_alias, load_aliases
+from services.team_names import branding_key, canonical_name, team_key
 
 MOSCOW = ZoneInfo("Europe/Moscow")
 BOOKMAKERS = {
@@ -36,10 +37,29 @@ def date(value):
         return None
 
 
-def compatible(left, right, *, allow_unknown_live=False):
+def team_alignment(left, right, *, allow_branding=False, aliases=None):
+    """Порядок команд: 1 — прямой, -1 — обратный, None — нет однозначной пары."""
+    for order, indices in ((1, (0, 1)), (-1, (1, 0))):
+        exact = [left["teams"][i] == right["teams"][j] for i, j in enumerate(indices)]
+        if all(exact):
+            return order
+        if (allow_branding or aliases) and any(exact):
+            candidates = [
+                exact[i] or accepted_alias(left[f"team{i + 1}"], right[f"team{j + 1}"], left["sport"], aliases) or (
+                    allow_branding and branding_key(left[f"team{i + 1}"]) is not None
+                    and branding_key(left[f"team{i + 1}"]) == branding_key(right[f"team{j + 1}"])
+                )
+                for i, j in enumerate(indices)
+            ]
+            if all(candidates):
+                return order
+    return None
+
+
+def compatible(left, right, *, allow_unknown_live=False, allow_branding=False, aliases=None):
     if left["sport"] != right["sport"] or left["status"] != right["status"]:
         return False
-    if sorted(left["teams"]) != sorted(right["teams"]):
+    if team_alignment(left, right, allow_branding=allow_branding, aliases=aliases) is None:
         return False
     if left.get("best_of") and right.get("best_of") and left["best_of"] != right["best_of"]:
         return False
@@ -49,7 +69,7 @@ def compatible(left, right, *, allow_unknown_live=False):
     return allow_unknown_live and left["status"] == "live"
 
 
-def group_events(rows):
+def group_events(rows, aliases=None):
     """Сначала точные даты, затем однозначные пары среди свежих LIVE-записей."""
     groups = []
     for row in rows:
@@ -81,7 +101,47 @@ def group_events(rows):
         groups[indices[0]] = members
         for index in indices[1:]:
             groups[index] = []
-    return [group for group in groups if group]
+    return merge_branding_variants([group for group in groups if group], aliases)
+
+
+def merge_branding_variants(groups, aliases=None):
+    # Слабые варианты названий разрешены только с известным временем и точным соперником.
+    # Рассматриваем всю компоненту кандидатов: два события одного букмекера запрещают слияние.
+    def can_merge(a, b):
+        # Для LIVE без даты нужны точные имена или отдельное подтверждённое решение LLM.
+        known_names = team_alignment(a, b, aliases=aliases) is not None
+        return compatible(
+            a, b, allow_branding=True, aliases=aliases, allow_unknown_live=bool(aliases) and known_names,
+        )
+
+    neighbors = {i: set() for i in range(len(groups))}
+    for i, j in combinations(neighbors, 2):
+        if all(can_merge(a, b) for a in groups[i] for b in groups[j]):
+            neighbors[i].add(j)
+            neighbors[j].add(i)
+    visited = set()
+    result = []
+    for index in neighbors:
+        if index in visited:
+            continue
+        component, pending = set(), [index]
+        while pending:
+            current = pending.pop()
+            if current in component:
+                continue
+            component.add(current)
+            pending.extend(neighbors[current] - component)
+        visited.update(component)
+        members = [row for i in sorted(component) for row in groups[i]]
+        if (
+            len(component) > 1
+            and len({row["bookmaker"] for row in members}) == len(members)
+            and all(can_merge(a, b) for a, b in combinations(members, 2))
+        ):
+            result.append(members)
+        else:
+            result.extend(groups[i] for i in sorted(component))
+    return result
 
 
 def start_label(match, now=None):
@@ -90,7 +150,10 @@ def start_label(match, now=None):
     start = date(match.get("starts_at"))
     if start is None:
         return "время уточняется"
-    start = (start + timedelta(seconds=30)).replace(second=0, microsecond=0).astimezone(MOSCOW)
+    # Обратный отсчёт содержит только полные минуты: это нижняя граница времени старта.
+    countdown = "через" in (match.get("start_label") or "").lower()
+    seconds = 60 if countdown and (start.second or start.microsecond) else 0 if countdown else 30
+    start = (start + timedelta(seconds=seconds)).replace(second=0, microsecond=0).astimezone(MOSCOW)
     today = (now or datetime.now(UTC)).astimezone(MOSCOW).date()
     days = (start.date() - today).days
     day = {0: "сегодня", 1: "завтра"}.get(days, start.strftime("%d.%m"))
@@ -106,8 +169,9 @@ class Matches:
     def __init__(self, directory: Path):
         self.directory = directory
 
-    def read(self, now=None):
+    def read(self, now=None, *, use_resolutions=True):
         now = now or datetime.now(UTC)
+        aliases = load_aliases(self.directory.parent / "team_aliases.json", now.timestamp()) if use_resolutions else {}
         rows = []
         for bookmaker in SOURCES:
             path = self.directory / bookmaker / "latest.json"
@@ -157,14 +221,21 @@ class Matches:
         # Точные даты первыми; одинаковый порядок сохраняет идентификатор при обновлении цен.
         rows.sort(key=lambda row: (not bool(date(row.get("starts_at"))), row["bookmaker"], row["id"]))
         groups = []
-        for members in group_events(rows):
+        for members in group_events(rows, aliases):
             first = members[0]
             identity = f"{first['sport']}:{first['bookmaker']}:{first['id']}"
             group = {**first, "id": hashlib.sha256(identity.encode()).hexdigest()[:16], "offers": []}
+            # Время из расписания точнее оценки по обратному отсчёту. ID и порядок команд сохраняем.
+            scheduled = next(
+                (row for row in members if date(row.get("starts_at"))
+                 and "через" not in (row.get("start_label") or "").lower()), None
+            )
+            if scheduled:
+                group.update(starts_at=scheduled["starts_at"], start_label=scheduled.get("start_label"))
             groups.append(group)
             for row in members:
                 p1, p2 = row["p1"], row["p2"]
-                if row["teams"] != group["teams"]:
+                if team_alignment(group, row, allow_branding=True, aliases=aliases) == -1:
                     p1, p2 = p2, p1
                 group["offers"].append(
                     {

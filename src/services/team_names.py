@@ -302,12 +302,24 @@ ALIASES = {
     "teamliquid": "liquid",
     "innercircleesports": "innercircle",
     "famalicaoesports": "famalicao",
+    "novusgaming": "novus",
 }
 
 
 def team_key(name):
     key = re.sub(r"[^\w]", "", name.casefold())
     return ALIASES.get(key, key)
+
+
+def branding_key(name):
+    """Кандидат для сравнения в контексте матча, не глобальный идентификатор команды."""
+    words = re.findall(r"\w+", name.casefold())
+    if len(words) > 1 and words[0] == "team":
+        words = words[1:]
+    if len(words) > 1 and words[-1] in ("gaming", "esports", "esport"):
+        words = words[:-1]
+    key = team_key(" ".join(words))
+    return key if len(key) >= 4 else None
 
 
 CANONICAL_NAMES = {team_key(name): name for name in HLTV_NAMES}

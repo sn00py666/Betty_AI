@@ -33,6 +33,7 @@ def healthy(directory):
         write(directory / "odds" / name / "latest.json", dict(fetched_at=datetime.now(UTC).isoformat(), matches=[]))
     for name in ("pandascore", "ai", "valve"):
         api_state(directory / "health" / f"{name}.json", status=200)
+    write(directory / "health" / "team_matching.json", dict(updated_at=now, unresolved=0))
     today = datetime.now(UTC).date().isoformat()
     write(directory / "valve.json", dict(snapshots={"new": dict(date=today)}))
 
@@ -84,6 +85,23 @@ def test_ai_usage_has_no_daily_quota(tmp_path, settings):
     assert "1000000" in item["detail"]
     assert "без дневного лимита" in item["detail"]
     assert "исчерпан" not in item["detail"]
+
+
+async def test_matching_review_alerts_once_and_recovers(tmp_path, settings):
+    healthy(tmp_path)
+    path = tmp_path / "health" / "team_matching.json"
+    write(path, dict(updated_at=time.time(), accepted=12, pending=0, unresolved=1, examples=["Alpha / A Team"]))
+    monitor = Monitor(settings, tmp_path)
+    item = states(monitor)["Сопоставление команд"]
+    assert item["code"] == "review" and "Alpha / A Team" in item["detail"]
+    bot = SimpleNamespace(send_message=AsyncMock())
+    await monitor.check(bot)
+    await Monitor(settings, tmp_path).check(bot)
+    assert bot.send_message.await_count == 1
+    write(path, dict(updated_at=time.time(), accepted=13, pending=0, unresolved=0))
+    await Monitor(settings, tmp_path).check(bot)
+    assert bot.send_message.await_count == 2
+    assert "✅" in bot.send_message.call_args.args[1]
 
 
 async def test_problem_once_after_restart_and_recovery_once(tmp_path, settings):

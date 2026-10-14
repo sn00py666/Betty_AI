@@ -328,25 +328,28 @@ async def test_collector_starts_independent_enabled_ranking_workers(tmp_path, mo
 
     async def worker(*args, **kwargs):
         started.append(args)
-        if len(started) == 4:
+        if len(started) == 5:
             ready.set()
         await asyncio.Event().wait()
 
     monkeypatch.setattr(collect, "DATA", tmp_path / "odds")
     monkeypatch.setattr(
         collect,
-        "RankingSettings",
+        "AISettings",
         lambda: SimpleNamespace(
-            valve_rankings_enabled=False, dota_opendota_enabled=True, dota_cyberscore_enabled=True, hltv_enabled=False
+            valve_rankings_enabled=False, dota_opendota_enabled=True, dota_cyberscore_enabled=True,
+            hltv_enabled=False, team_matching_enabled=True,
         ),
     )
     monkeypatch.setattr(collect, "heartbeat", lambda *args, **kwargs: worker("heartbeat"))
     monkeypatch.setattr(collect, "collect_loop", worker)
     monkeypatch.setattr(collect, "run_dota_rankings", worker)
+    monkeypatch.setattr(collect, "run_team_matching", lambda *args: worker("matching"))
     task = asyncio.create_task(collect.run([], True))
     try:
         await asyncio.wait_for(ready.wait(), 1)
         assert (tmp_path, "opendota") in started and (tmp_path, "cyberscore") in started
+        assert ("matching",) in started
     finally:
         task.cancel()
         with pytest.raises(asyncio.CancelledError):

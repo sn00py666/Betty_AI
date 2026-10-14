@@ -14,8 +14,8 @@ from services.health import read, safe_error, write
 from services.matches import BOOKMAKERS, MOSCOW, date
 
 logger = logging.getLogger(__name__)
-PROBLEMS = {"error", "blocked", "limited", "stale", "offline"}
-ICONS = {"ok": "🟢", "idle": "⚪", "disabled": "⚪", "limited": "🟠", "stale": "🟠"}
+PROBLEMS = {"error", "blocked", "limited", "stale", "offline", "review"}
+ICONS = {"ok": "🟢", "idle": "⚪", "disabled": "⚪", "limited": "🟠", "stale": "🟠", "review": "🟠"}
 LABELS = {
     "ok": "работает",
     "idle": "ожидается первый сигнал",
@@ -25,6 +25,7 @@ LABELS = {
     "offline": "процесс недоступен",
     "blocked": "доступ ограничен",
     "error": "ошибка",
+    "review": "есть спорные совпадения",
 }
 
 
@@ -203,6 +204,28 @@ class Monitor:
                     code = "error"
                     detail += "; сбор рейтинга не начался"
             add(name, code, detail)
+
+        matching = load(self.directory / "health" / "team_matching.json", "Сопоставление команд")
+        if matching is not None:
+            enabled = getattr(self.settings, "team_matching_enabled", True)
+            code = classify(matching) if enabled else "disabled"
+            if enabled and not matching:
+                code = "idle" if now - self.started < 120 else "stale"
+            elif enabled and now - matching.get("updated_at", 0) > 300:
+                code = "stale"
+            elif enabled and code == "ok" and matching.get("unresolved"):
+                code = "review"
+            detail = (
+                f"Вариантов в кеше: {matching.get('accepted', 0)}; "
+                f"в очереди: {matching.get('pending', 0)}; спорных: {matching.get('unresolved', 0)}"
+            )
+            if enabled and not self.settings.ai_api_key:
+                detail += "; ключ LLM не настроен"
+            if matching.get("examples"):
+                detail += "; " + "; ".join(matching["examples"])
+            if matching.get("error"):
+                detail += f"; {matching['error']}"
+            add("Сопоставление команд", code, detail)
 
         hltv = load(self.directory / "hltv" / "state.json", "HLTV")
         if hltv is not None:
