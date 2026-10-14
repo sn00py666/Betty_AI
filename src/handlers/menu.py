@@ -12,7 +12,6 @@ from services.ai import Analyst, facts
 from services.analysis import render, render_offers
 from services.bonuses import ordered_offers, render_bonus
 from services.discovery import sort_matches
-from services.dota_rankings import SOURCES as DOTA_SOURCES
 from services.dota_rankings import enabled_sources, select_ranking
 from services.forecasts import recall, remember
 from services.matches import Matches, date
@@ -29,7 +28,7 @@ async def show_matches(message, user_id, users, matches, page=0, edit=False, set
         await message.answer("<b>Выбери дисциплину:</b>", reply_markup=menu.disciplines())
         return
     mode = users.get(user_id).get("match_sort", "popular")
-    source, dota_ranks, _ = select_ranking(matches.directory.parent, enabled_sources(settings))
+    _, dota_ranks, _ = select_ranking(matches.directory.parent, enabled_sources(settings))
     items = sort_matches(
         [m for m in matches.read() if m["sport"] == sport],
         mode,
@@ -38,15 +37,6 @@ async def show_matches(message, user_id, users, matches, page=0, edit=False, set
     )
     page = min(max(0, page), max(0, (len(items) - 1) // menu.PAGE_SIZE))
     text = content.MATCH_LIST if items else "Свежих матчей этой дисциплины сейчас нет. Попробуй позже."
-    if items:
-        text += f"\n\n<i>Время МСК · {page + 1}/{(len(items) - 1) // menu.PAGE_SIZE + 1}</i>"
-    if items and mode == "popular":
-        label = "Valve VRS" if sport == "cs2" else DOTA_SOURCES.get(source)
-        text += (
-            f"\n<i>Сначала команды выше в рейтинге {label}. LIVE — первыми.</i>"
-            if label
-            else "\n<i>Рейтинг временно недоступен: порядок по числу букмекеров и времени. LIVE — первыми.</i>"
-        )
     markup = menu.matches(items, sport, page, mode)
     if edit:
         try:
@@ -110,6 +100,11 @@ async def select_discipline(callback: CallbackQuery, users: Users, matches: Matc
 async def open_matches(callback: CallbackQuery, users: Users, matches: Matches, settings: Settings = None):
     await callback.answer()
     await show_matches(callback.message, callback.from_user.id, users, matches, settings=settings)
+
+
+@router.callback_query(F.data == "page_current")
+async def current_page(callback: CallbackQuery):
+    await callback.answer()
 
 
 @router.callback_query(F.data.startswith("page:"))

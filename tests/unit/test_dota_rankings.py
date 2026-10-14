@@ -358,7 +358,7 @@ def test_ranking_settings_do_not_require_bot_token(monkeypatch):
 
 
 @pytest.mark.parametrize("enabled", [True, False])
-async def test_match_list_names_selected_source_and_respects_disabled_setting(tmp_path, enabled):
+async def test_match_list_hides_ranking_details_with_source_enabled_or_disabled(tmp_path, enabled):
     cache(tmp_path, "cyberscore", time.time())
     users = SimpleNamespace(get=lambda _: dict(sport="dota2", match_sort="popular"))
     match = dict(
@@ -375,6 +375,6 @@ async def test_match_list_names_selected_source_and_respects_disabled_setting(tm
     settings = SimpleNamespace(dota_opendota_enabled=False, dota_cyberscore_enabled=enabled)
     await show_matches(message, 1, users, matches, settings=settings)
     text = message.answer.call_args.args[0]
-    assert ("CyberScore" in text) is enabled
-    assert ("Рейтинг временно недоступен" in text) is not enabled
+    assert "CyberScore" not in text
+    assert "Рейтинг временно недоступен" not in text
     assert "Valve" not in text

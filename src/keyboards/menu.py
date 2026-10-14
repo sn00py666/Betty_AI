@@ -26,6 +26,9 @@ def matches(items, sport, page, mode="popular"):
     arrows = []
     if page:
         arrows.append(InlineKeyboardButton(text="←", callback_data=f"page:{sport}:{page - 1}"))
+    if items:
+        total_pages = (len(items) - 1) // PAGE_SIZE + 1
+        arrows.append(InlineKeyboardButton(text=f"{page + 1}/{total_pages}", callback_data="page_current"))
     if (page + 1) * PAGE_SIZE < len(items):
         arrows.append(InlineKeyboardButton(text="→", callback_data=f"page:{sport}:{page + 1}"))
     if arrows:

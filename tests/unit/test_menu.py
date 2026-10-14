@@ -168,12 +168,21 @@ async def test_pagination_has_five_matches_and_edits_same_message(dispatcher, bo
     message = requests(bot, EditMessageText)[0]
     rows = message.reply_markup.inline_keyboard
     assert [r[0].callback_data for r in rows[:5]] == [f"match:{i}" for i in range(5, 10)]
-    assert [b.callback_data for b in rows[5]] == ["page:cs2:0", "page:cs2:2"]
-    assert "2/3" in message.text
+    assert [b.callback_data for b in rows[5]] == ["page:cs2:0", "page_current", "page:cs2:2"]
+    assert [b.text for b in rows[5]] == ["←", "2/3", "→"]
+    assert "2/3" not in message.text
+    assert "Время МСК" not in message.text
+    assert "Сначала команды" not in message.text
+    assert "лучший коэффициент" in message.text
     await dispatcher.feed_update(bot, incoming(callback="page:cs2:2"), users=users, matches=matches)
     rows = requests(bot, EditMessageText)[-1].reply_markup.inline_keyboard
     assert rows[0][0].callback_data == "match:10"
-    assert [b.callback_data for b in rows[1]] == ["page:cs2:1"]
+    assert [b.callback_data for b in rows[1]] == ["page:cs2:1", "page_current"]
+    assert [b.text for b in rows[1]] == ["←", "3/3"]
+    await dispatcher.feed_update(bot, incoming(callback="page:cs2:0"), users=users, matches=matches)
+    rows = requests(bot, EditMessageText)[-1].reply_markup.inline_keyboard
+    assert [b.text for b in rows[5]] == ["1/3", "→"]
+    assert [b.callback_data for b in rows[5]] == ["page_current", "page:cs2:1"]
 
 
 async def test_live_matches_fill_first_pages_before_upcoming(dispatcher, bot, users, matches, monkeypatch):
@@ -200,7 +209,8 @@ async def test_sorting_selection_persists_and_returns_to_page_one(dispatcher, bo
     await dispatcher.feed_update(bot, incoming(callback="sort:cs2:time"), users=users, matches=matches)
     assert Users(users.path).get(42)["match_sort"] == "time"
     message = requests(bot, EditMessageText)[-1]
-    assert "1/1" in message.text
+    assert "1/1" not in message.text
+    assert any(b.text == "1/1" for row in message.reply_markup.inline_keyboard for b in row)
     assert any(b.text == "✓ По времени" for row in message.reply_markup.inline_keyboard for b in row)
 
 
