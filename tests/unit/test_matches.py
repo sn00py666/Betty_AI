@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from services.freshness import LIVE_TTL
 from services.matches import Matches, market_probability
 
 NOW = datetime(2026, 10, 4, 20, tzinfo=UTC)
@@ -79,7 +80,8 @@ def test_invalid_or_closed_markets(tmp_path, changes):
 def test_stale_prematch_and_live_hidden(tmp_path):
     snapshot(tmp_path, "pari")
     snapshot(tmp_path, "fonbet", url="https://fon.bet/sports/10", status="live")
-    assert len(Matches(tmp_path).read(NOW + timedelta(seconds=61))) == 1
+    assert len(Matches(tmp_path).read(NOW + timedelta(seconds=LIVE_TTL - 1))) == 2
+    assert len(Matches(tmp_path).read(NOW + timedelta(seconds=LIVE_TTL + 1))) == 1
     assert Matches(tmp_path).read(NOW + timedelta(minutes=31)) == []
 
 
@@ -100,6 +102,41 @@ def test_dates_use_moscow_day_at_utc_midnight_boundary():
     assert start_label(match, now) == "завтра 02:00"
 
 
+@pytest.mark.parametrize(
+    "starts_at,expected",
+    [
+        ("2026-10-04T09:59:47.414043+00:00", "сегодня 13:00"),
+        ("2026-10-04T10:00:12+00:00", "сегодня 13:00"),
+        ("2026-10-04T10:30:00+00:00", "сегодня 13:30"),
+        ("2026-10-04T20:59:47+00:00", "завтра 00:00"),
+    ],
+)
+def test_display_time_rounds_to_nearest_minute(starts_at, expected):
+    from services.matches import start_label
+
+    match = dict(status="prematch", starts_at=starts_at)
+    assert start_label(match, datetime(2026, 10, 4, 9, tzinfo=UTC)) == expected
+    assert match["starts_at"] == starts_at
+
+
+def test_envy_alias_merges_bookmakers_with_seconds_difference(tmp_path):
+    start = NOW + timedelta(hours=2)
+    snapshot(tmp_path, "pari", team1="Heroic", team2="Team Envy", starts_at=start.isoformat())
+    snapshot(
+        tmp_path,
+        "leon",
+        team1="ENVY",
+        team2="HEROIC",
+        starts_at=(start - timedelta(seconds=13)).isoformat(),
+        p1=1.6,
+        p2=2.6,
+    )
+    rows = Matches(tmp_path).read(NOW)
+    assert len(rows) == 1
+    assert (rows[0]["team1"], rows[0]["team2"]) == ("Envy", "HEROIC")
+    assert [(o["p1"], o["p2"]) for o in rows[0]["offers"]] == [(1.6, 2.6), (1.5, 2.5)]
+
+
 def test_chronological_order_puts_unknown_times_last(tmp_path):
     data = snapshot(tmp_path, "pari")
     original = data["matches"][0]
@@ -118,7 +155,7 @@ def test_browser_capture_time_is_not_extended_by_later_pages(tmp_path):
         tmp_path,
         "pari",
         status="live",
-        fetched_at=(NOW - timedelta(seconds=61)).isoformat(),
+        fetched_at=(NOW - timedelta(seconds=LIVE_TTL + 1)).isoformat(),
         expires_at=(NOW + timedelta(seconds=60)).isoformat(),
     )
     assert Matches(tmp_path).read(NOW) == []
@@ -154,6 +191,7 @@ def test_hltv_names_normalized_before_merging_sources(tmp_path):
         ("Natus Vincere", "NAVI"),
         ("Ninja in Pyjamas", "NIP"),
         ("Team Spirit", "Spirit"),
+        ("Team Envy", "Envy"),
         ("Team Falcons", "Falcons"),
         ("Aurora Gaming", "Aurora"),
         ("BB Team", "BETBOOM"),

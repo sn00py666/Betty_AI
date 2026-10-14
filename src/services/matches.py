@@ -3,13 +3,14 @@
 import hashlib
 import json
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from statistics import median
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 from integrations.bookmakers import SOURCES, price
+from services.freshness import LIVE_TTL, PREMATCH_TTL
 from services.team_names import canonical_name, team_key
 
 MOSCOW = ZoneInfo("Europe/Moscow")
@@ -54,7 +55,7 @@ def start_label(match, now=None):
     start = date(match.get("starts_at"))
     if start is None:
         return "время уточняется"
-    start = start.astimezone(MOSCOW)
+    start = (start + timedelta(seconds=30)).replace(second=0, microsecond=0).astimezone(MOSCOW)
     today = (now or datetime.now(UTC)).astimezone(MOSCOW).date()
     days = (start.date() - today).days
     day = {0: "сегодня", 1: "завтра"}.get(days, start.strftime("%d.%m"))
@@ -91,7 +92,7 @@ class Matches:
                     if observed > now:
                         continue
                     age = (now - observed).total_seconds()
-                    if age > (60 if status == "live" else 1800):
+                    if age > (LIVE_TTL if status == "live" else PREMATCH_TTL):
                         continue
                     start = date(raw.get("starts_at"))
                     if status == "prematch" and start and start <= now:

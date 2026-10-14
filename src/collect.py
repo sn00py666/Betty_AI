@@ -21,7 +21,9 @@ from config import RankingSettings
 from integrations.bookmakers import SOURCES, parse_response
 from integrations.browser import BROWSER_URLS, load_rendered, load_winline
 from integrations.errors import StopSource
+from services.collection_schedule import FAST_INTERVAL, LIVE_SOURCES, hot_sports, next_start_check
 from services.dota_rankings import enabled_sources, run_dota_rankings
+from services.freshness import LIVE_TTL, PREMATCH_TTL
 from services.health import heartbeat
 from services.rankings import run_rankings
 
@@ -33,7 +35,7 @@ USER_AGENT = (
 )
 ROBOTS_AGENT = "BettyAI/0.1"  # Смена HTTP-заголовка не снимает ограничения для нашего сборщика.
 HEADERS = {"User-Agent": USER_AGENT, "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7"}
-INTERVAL = 1800  # Один снимок раз в полчаса. Это архив прематча, не live-фид.
+INTERVAL = PREMATCH_TTL
 MAX_BYTES = 20 * 1024 * 1024
 
 
@@ -79,6 +81,20 @@ async def request(client, url, headers=None, *, robots=False):
         return response, text
 
 
+def schedule_snapshots(directory):
+    snapshots = []
+    for name in SOURCES:
+        try:
+            snapshot = read_json(directory / name / "latest.json", {})
+            if isinstance(snapshot, dict) and isinstance(snapshot.get("matches", []), list):
+                snapshots.append(
+                    snapshot | {"matches": [m for m in snapshot.get("matches", []) if isinstance(m, dict)]}
+                )
+        except (OSError, ValueError):
+            continue
+    return snapshots
+
+
 async def collect_one(name, client, directory=DATA):
     folder = directory / name
     folder.mkdir(parents=True, exist_ok=True)
@@ -86,13 +102,24 @@ async def collect_one(name, client, directory=DATA):
     state = read_json(state_path, {})
     now = time.time()
     if state.get("paused"):
-        print(f"{name}: остановлен — {state.get('error')}")
         return
+    snapshots = schedule_snapshots(directory)
+    active = hot_sports(snapshots, now) if name in LIVE_SOURCES else set()
+    state.setdefault("last_full_success", state.get("last_success", 0))
+    full_due = state["last_full_success"] + INTERVAL
+    sports = active if active and now < full_due else None
+    rules = Protego.parse(state.get("robots", ""))
+    crawl_delay = rules.crawl_delay(ROBOTS_AGENT) or 0
+    # Быстрый режим может сократить обычную паузу, но никогда — backoff после ошибки.
+    if active and state.get("last_success") and not state.get("failures") and not state.get("error"):
+        state["next_request"] = min(
+            state.get("next_request", 0),
+            max(state["last_success"], state.get("last_attempt", 0)) + max(FAST_INTERVAL, crawl_delay),
+        )
     if now < state.get("next_request", 0):
-        print(f"{name}: пауза ещё {int(state['next_request'] - now)} с")
         return
     # Записываем ДО сети: авария или перезапуск не должны создавать частые запросы.
-    state["next_request"] = now + INTERVAL + random.uniform(0, 60)
+    state["next_request"] = now + max(FAST_INTERVAL if active else INTERVAL, crawl_delay)
     state["last_attempt"] = now
     save_json(state_path, state)
     url = SOURCES[name]
@@ -101,7 +128,8 @@ async def collect_one(name, client, directory=DATA):
         rendered = name in ("leon", "betboom")
         if rendered:
             cached_rules = state.get("robots") if now - state.get("robots_checked", 0) < 86400 else None
-            response, text, robot_text = await load_rendered(name, url, cached_rules)
+            options = {"sports": sports} if sports else {}
+            response, text, robot_text = await load_rendered(name, url, cached_rules, **options)
             if response.status_code in (401, 403, 451):
                 raise StopSource(f"HTTP {response.status_code}: доступ ограничен")
             response.raise_for_status()
@@ -132,7 +160,8 @@ async def collect_one(name, client, directory=DATA):
         if rendered:
             pass  # Линия уже загружена вместе с robots.txt в одном браузерном сеансе.
         elif name == "winline":
-            response, text = await load_winline(url, state.get("robots", ""))
+            options = {"sports": sports} if sports else {}
+            response, text = await load_winline(url, state.get("robots", ""), **options)
             if response.status_code in (401, 403, 451):
                 raise StopSource(f"HTTP {response.status_code}: доступ ограничен")
             response.raise_for_status()
@@ -161,21 +190,25 @@ async def collect_one(name, client, directory=DATA):
                 **match,
                 "expires_at": datetime.fromtimestamp(
                     (datetime.fromisoformat(match["fetched_at"]).timestamp() if match.get("fetched_at") else fetched)
-                    + (60 if match["status"] == "live" else INTERVAL),
+                    + (LIVE_TTL if match["status"] == "live" else INTERVAL),
                     UTC,
                 ).isoformat(),
             }
             for match in matches
         ]
+        if sports:
+            # Непроверенная дисциплина сохраняет прежние даты свежести, а не время быстрого прохода.
+            previous = read_json(folder / "latest.json", {})
+            timed_matches.extend(
+                match for match in previous.get("matches", []) if match.get("sport", "cs2") not in sports
+            )
         snapshot = {
             "bookmaker": name,
             "fetched_at": datetime.fromtimestamp(fetched, UTC).isoformat(),
-            "expires_at": datetime.fromtimestamp(
-                fetched + (60 if any(m["status"] == "live" for m in matches) else INTERVAL), UTC
-            ).isoformat(),
+            "expires_at": datetime.fromtimestamp(fetched + INTERVAL, UTC).isoformat(),
             "matches": timed_matches,
         }
-        content = [{k: v for k, v in match.items() if k != "fetched_at"} for match in matches]
+        content = [{k: v for k, v in match.items() if k not in ("fetched_at", "expires_at")} for match in timed_matches]
         digest = hashlib.sha256(json.dumps(content, sort_keys=True).encode()).hexdigest()
         if digest != state.get("digest"):
             with (folder / "history.jsonl").open("a") as history:
@@ -189,6 +222,17 @@ async def collect_one(name, client, directory=DATA):
         state.update(
             digest=digest, failures=0, error=None, paused=False, last_success=fetched, http_status=response.status_code
         )
+        if not sports:
+            state["last_full_success"] = fetched
+        snapshots = schedule_snapshots(directory)
+        active = hot_sports(snapshots, fetched) if name in LIVE_SOURCES else set()
+        delay = FAST_INTERVAL if active else INTERVAL + random.uniform(0, 60)
+        due = fetched + delay
+        if name in LIVE_SOURCES:
+            due = min(due, state["last_full_success"] + INTERVAL, next_start_check(snapshots, fetched))
+        state["next_request"] = max(due, fetched + (rules.crawl_delay(ROBOTS_AGENT) or 0))
+        state["refresh_mode"] = "fast" if active else "prematch"
+        state["fast_sports"] = sorted(active)
         print(f"{name}: {len(matches)} матчей → {folder / 'latest.json'}")
     except httpx.HTTPStatusError as error:
         code = error.response.status_code
@@ -235,14 +279,25 @@ async def collect_loop(names, watch):
     async with httpx.AsyncClient(
         timeout=30,
         follow_redirects=False,
-        limits=httpx.Limits(max_connections=1),
+        limits=httpx.Limits(max_connections=3),
     ) as client:
-        while True:
+        browser_slot = asyncio.Semaphore(1)
+
+        async def worker(name):
+            while True:
+                if name in LIVE_SOURCES:
+                    # На сервере одновременно работает не более одного Chrome.
+                    async with browser_slot:
+                        await collect_one(name, client)
+                else:
+                    await collect_one(name, client)
+                if not watch:
+                    return
+                await asyncio.sleep(5)
+
+        async with asyncio.TaskGroup() as group:
             for name in names:
-                await collect_one(name, client)
-            if not watch:
-                return
-            await asyncio.sleep(60)
+                group.create_task(worker(name))
 
 
 async def run(names, watch):
@@ -268,7 +323,7 @@ async def run(names, watch):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Редкие снимки линии CS2 / Dota 2")
+    parser = argparse.ArgumentParser(description="Адаптивный сбор прематча и LIVE CS2 / Dota 2")
     parser.add_argument("bookmakers", nargs="*", help="fonbet marathon pari betboom leon winline")
     parser.add_argument("--watch", action="store_true", help="оставаться запущенным и соблюдать сохранённые паузы")
     args = parser.parse_args()

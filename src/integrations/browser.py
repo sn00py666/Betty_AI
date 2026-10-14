@@ -92,7 +92,7 @@ async def snapshots(page, name):
     return result
 
 
-async def load_rendered(name, url, robots=None):
+async def load_rendered(name, url, robots=None, *, sports=None):
     request = httpx.Request("GET", url)
     denied = None
     denied_document = False
@@ -162,7 +162,12 @@ async def load_rendered(name, url, robots=None):
                 await asyncio.sleep(max(10, Protego.parse(robots).crawl_delay("BettyAI/0.1") or 0))
             rules = Protego.parse(robots)
             pages = []
-            for index, address in enumerate(BROWSER_URLS[name]):
+            addresses = [
+                address
+                for sport, address in zip(("cs2", "dota2"), BROWSER_URLS[name], strict=True)
+                if sports is None or sport in sports
+            ]
+            for index, address in enumerate(addresses):
                 if not rules.can_fetch(address, "BettyAI/0.1"):
                     raise StopSource(f"{name}: robots.txt запрещает {address}")
                 if index:
@@ -223,6 +228,6 @@ async def load_rendered(name, url, robots=None):
                 await browser.close()
 
 
-async def load_winline(url, robots=""):
-    response, text, _ = await load_rendered("winline", url, robots)
+async def load_winline(url, robots="", *, sports=None):
+    response, text, _ = await load_rendered("winline", url, robots, sports=sports)
     return response, text

@@ -261,6 +261,7 @@ HLTV_NAMES = (
 
 # Только известные варианты, без нечёткого сравнения и удаления Academy/Youngsters.
 ALIASES = {
+    "teamenvy": "envy",
     "teamspirit": "spirit",
     "g2esports": "g2",
     "natusvincere": "navi",
@@ -335,6 +336,7 @@ def canonical_text(text, sport="cs2"):
             "BB Team": "BETBOOM",
             "BetBoom Team": "BETBOOM",
             "Team Spirit": "Spirit",
+            "Team Envy": "Envy",
             "Team Falcons": "Falcons",
             "Team Vitality": "Vitality",
             "Team Liquid": "Liquid",
