@@ -18,6 +18,7 @@ SOURCES = {
     "betboom": "https://betboom.ru/esport/counter-strike-2",
     "leon": "https://leon.ru/esports/cs2",
 }
+LIVE_URLS = {"marathon": "https://www.marathonbet.ru/su/live/1372932"}
 
 
 def price(value):
@@ -42,7 +43,11 @@ def parse_fonbet(text, bookmaker="fonbet"):
     factors = {f["e"]: f for f in data["customFactors"]}
     matches = []
     for event in data["events"]:
-        if event.get("sportId") not in tournaments or event.get("level") != 1 or event.get("place") != "line":
+        if (
+            event.get("sportId") not in tournaments
+            or event.get("level") != 1
+            or event.get("place") not in ("line", "live")
+        ):
             continue
         if not event.get("team1") or not event.get("team2"):
             continue
@@ -65,10 +70,12 @@ def parse_fonbet(text, bookmaker="fonbet"):
                 "starts_at": datetime.fromtimestamp(event["startTime"], UTC).isoformat(),
                 "start_label": None,
                 "market": "match_winner",
-                "status": "prematch",
+                "status": "live" if event["place"] == "live" else "prematch",
                 "p1": None if suspended else odds.get(921),
                 "p2": None if suspended else odds.get(923),
-                "url": f"https://{domain}/sports/{event['sportId']}/{event['id']}",
+                "url": f"https://{domain}/live"
+                if event["place"] == "live"
+                else f"https://{domain}/sports/{event['sportId']}/{event['id']}",
             }
         )
     return matches
@@ -76,7 +83,7 @@ def parse_fonbet(text, bookmaker="fonbet"):
 
 def parse_marathon(text, captured_at=None, url=None):
     soup = BeautifulSoup(text, "html.parser")
-    if not soup.select_one(".category-container"):
+    if not soup.select_one(".category-container, [data-live-events-container]"):
         raise ValueError("Линия Марафон отсутствует или изменилась разметка")
     zone = re.search(r'"timeZoneId"\s*:\s*"([^"]+)"', text)
     # Предпочитаем структурированные даты; текст — только с часовым поясом самой страницы.
@@ -97,7 +104,10 @@ def parse_marathon(text, captured_at=None, url=None):
         tournament = heading.get_text(" ", strip=True) if heading else ""
         if not re.search(r"\b(?:CS\s*2|Dota\s*2)\.", tournament, re.I):
             continue
-        for row in category.select('[data-event-name][data-live="false"]'):
+        for row in category.select("[data-event-name][data-live]"):
+            if row["data-live"] not in ("true", "false"):
+                continue
+            live = row["data-live"] == "true"
             teams = [node.get_text(strip=True) for node in row.select('[data-member-link="true"]')]
             if len(teams) != 2:
                 raise ValueError("Не удалось прочитать две команды Марафон")
@@ -111,7 +121,13 @@ def parse_marathon(text, captured_at=None, url=None):
                     odds[key.rsplit(".", 1)[1]] = (
                         price(node.get("data-selection-price")) if "active-selection" in node.get("class", []) else None
                     )
-            path = "/su/betting/" + row["data-event-path"]
+            if live:
+                link = row.select_one('a[href^="/su/live/"]')
+                if link is None:
+                    raise ValueError("Марафон: не прочитана ссылка LIVE-матча")
+                path = link["href"]
+            else:
+                path = "/su/betting/" + row["data-event-path"]
             label = row.select_one(".date")
             start_label = label.get_text(" ", strip=True) if label else None
             dated_label = start_label
@@ -126,10 +142,12 @@ def parse_marathon(text, captured_at=None, url=None):
                     "tournament": tournament,
                     "best_of": int(best_of[1]) if best_of else (1 if "одной карты" in tournament else None),
                     "sport": "dota2" if "dota" in tournament.lower() else "cs2",
-                    "starts_at": dates.get(path) or (start_time(dated_label, captured_at, zone[1]) if zone else None),
-                    "start_label": start_label,
+                    "starts_at": None
+                    if live
+                    else dates.get(path) or (start_time(dated_label, captured_at, zone[1]) if zone else None),
+                    "start_label": None if live else start_label,
                     "market": "match_winner",
-                    "status": "prematch",
+                    "status": "live" if live else "prematch",
                     "p1": odds.get("1"),
                     "p2": odds.get("3"),
                     "url": "https://www.marathonbet.ru" + path,

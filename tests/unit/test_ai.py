@@ -1,4 +1,5 @@
 import json
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
 import httpx
@@ -40,7 +41,7 @@ def match():
 
 
 def settings():
-    return Settings(_env_file=None, telegram_bot_token="123:abc", ai_api_key=SecretStr("test-key"), ai_daily_limit=2)
+    return Settings(_env_file=None, telegram_bot_token="123:abc", ai_api_key=SecretStr("test-key"))
 
 
 async def test_cache_reused_after_restart_and_refresh(tmp_path, monkeypatch, match):
@@ -80,13 +81,38 @@ async def test_provider_error_falls_back_and_backs_off(tmp_path, monkeypatch, ma
     assert "AI-разбор сейчас недоступен" in render(match)
 
 
-async def test_daily_request_limit_persists(tmp_path, monkeypatch, match):
-    config = settings()
-    config.ai_daily_limit = 0
-    post = AsyncMock()
+async def test_high_usage_and_legacy_limit_do_not_block_requests_after_restart(tmp_path, monkeypatch, match):
+    monkeypatch.setenv("AI_DAILY_LIMIT", "0")
+    today = datetime.now(UTC).date().isoformat()
+    usage_path = tmp_path / "ai_usage.json"
+    usage_path.write_text(json.dumps({"0": {"date": today, "count": 1000000}}))
+    post = AsyncMock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "summary": "Матч близкий, явного перевеса нет.",
+                                    "winner": "unclear",
+                                    "probability": None,
+                                }
+                            )
+                        }
+                    }
+                ]
+            },
+            request=httpx.Request("POST", "https://openrouter.ai/"),
+        )
+    )
     monkeypatch.setattr(httpx.AsyncClient, "post", post)
-    assert await Analyst(config, tmp_path / "analysis.json").explain(match) is None
-    post.assert_not_awaited()
+    for index in range(3):
+        current = dict(match, tournament=f"Test Cup {index}")
+        assert await Analyst(settings(), tmp_path / "analysis.json").explain(current) is not None
+    assert post.await_count == 3
+    assert json.loads(usage_path.read_text())["0"]["count"] == 1000003
 
 
 def test_facts_do_not_include_bookmaker_prices(match):

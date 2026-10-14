@@ -6,7 +6,10 @@ from services.matches import date
 FAST_INTERVAL = 30
 START_WINDOW = 600
 START_GRACE = 1800
-LIVE_SOURCES = frozenset({"winline", "leon", "betboom"})
+BROWSER_SOURCES = frozenset({"winline", "leon", "betboom"})
+HTTP_LIVE_SOURCES = frozenset({"fonbet", "pari", "marathon"})
+LIVE_SOURCES = BROWSER_SOURCES | HTTP_LIVE_SOURCES
+LIVE_DISCOVERY_INTERVAL = 300
 
 
 def hot_sports(snapshots, now):

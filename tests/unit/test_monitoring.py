@@ -19,7 +19,6 @@ def settings():
         pandascore_api_key="test",
         ai_api_key="test",
         pandascore_daily_limit=100,
-        ai_daily_limit=500,
         valve_rankings_enabled=True,
     )
 
@@ -74,6 +73,16 @@ def test_stale_offline_budget_and_corrupt_state_are_visible(tmp_path, settings):
     assert items["PandaScore"]["code"] == "limited"
     assert items["OpenRouter AI"]["code"] == "limited"
     assert items["Valve VRS"]["code"] == "stale"
+
+
+def test_ai_usage_has_no_daily_quota(tmp_path, settings):
+    healthy(tmp_path)
+    write(tmp_path / "ai_usage.json", {"0": {"date": datetime.now(UTC).date().isoformat(), "count": 1000000}})
+    item = states(Monitor(settings, tmp_path))["OpenRouter AI"]
+    assert item["code"] == "ok"
+    assert "1000000" in item["detail"]
+    assert "без дневного лимита" in item["detail"]
+    assert "исчерпан" not in item["detail"]
 
 
 async def test_problem_once_after_restart_and_recovery_once(tmp_path, settings):

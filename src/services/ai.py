@@ -199,7 +199,7 @@ class Analyst:
                 today = datetime.now(UTC).date().isoformat()
                 usage = self.usage.get(0)
                 count = usage.get("count", 0) if usage.get("date") == today else 0
-                if count >= self.settings.ai_daily_limit or monotonic() < self.retry_at:
+                if monotonic() < self.retry_at:
                     return None
                 self.usage.update(0, date=today, count=count + 1)
                 async with httpx.AsyncClient(timeout=20) as client:

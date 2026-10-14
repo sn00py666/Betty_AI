@@ -1,6 +1,6 @@
 """Сравнение промптов на вымышленных фактах: python scripts/compare_forecast_prompts.py.
 
-Результаты сохраняются локально, запросы учитываются в AI_DAILY_LIMIT.
+Результаты сохраняются локально; запросы учитываются для статистики без дневной квоты.
 Один запуск: пять сценариев × число температур × число повторов.
 """
 
@@ -79,9 +79,6 @@ async def run(args):
     today = datetime.now(UTC).date().isoformat()
     previous = usage.get(0)
     count = previous.get("count", 0) if previous.get("date") == today else 0
-    required = len(variants) * len(scenarios()) * args.repeats
-    if count + required > settings.ai_daily_limit:
-        raise SystemExit(f"Для {required} запросов недостаточно остатка AI_DAILY_LIMIT")
     results = []
     # Последовательно: счётчик сохраняется перед каждой попыткой, включая ошибки.
     async with httpx.AsyncClient(timeout=45) as client:

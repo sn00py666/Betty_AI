@@ -166,6 +166,7 @@ class Monitor:
                         code = "limited"
                         detail += "; дневной лимит исчерпан"
             elif name == "OpenRouter AI":
+                detail += "; без дневного лимита запросов"
                 usage = load(self.directory / "ai_usage.json", "Счётчик AI")
                 if usage:
                     row = usage.get("0", {})
@@ -174,10 +175,7 @@ class Monitor:
                         if row.get("date") == datetime.fromtimestamp(now, UTC).date().isoformat()
                         else 0
                     )
-                    detail += f"; запросы {used}/{self.settings.ai_daily_limit} за сутки"
-                    if configured and used >= self.settings.ai_daily_limit and code in ("ok", "idle"):
-                        code = "limited"
-                        detail += "; дневной лимит исчерпан"
+                    detail += f"; запросы {used} за сутки"
             elif name == "Valve VRS" and configured:
                 cache = load(self.directory / "valve.json", "Кеш Valve")
                 if cache:

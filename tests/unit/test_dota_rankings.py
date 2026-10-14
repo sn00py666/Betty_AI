@@ -248,7 +248,6 @@ def monitor_settings(**changes):
         pandascore_api_key=None,
         ai_api_key=None,
         pandascore_daily_limit=100,
-        ai_daily_limit=500,
         valve_rankings_enabled=False,
         dota_opendota_enabled=True,
         dota_cyberscore_enabled=True,

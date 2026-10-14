@@ -1,0 +1,135 @@
+{
+  "sports": [
+    {
+      "id": 144795,
+      "parentId": 29086,
+      "parentIds": [
+        30235,
+        30234
+      ],
+      "kind": "segment",
+      "sortOrder": "1+++I++-V+54S&zS+zwu+++3+5MO+++S+5MP-TU0+XKP",
+      "name": "Dota 2. EPL Masters. Bo3",
+      "tournamentInfoId": 6430,
+      "sportCategoryId": 19
+    },
+    {
+      "id": 138457,
+      "parentId": 29086,
+      "parentIds": [
+        31817,
+        33909
+      ],
+      "kind": "segment",
+      "regionId": 1,
+      "sortOrder": "1+++I++-V+54S&zV+zzx+++8+6Fp+++I+5l7-Z+B+VnN",
+      "name": "Counter-Strike. PGL Bucharest. Отборочные игры. Bo3",
+      "tournamentInfoId": 2240,
+      "sportCategoryId": 20
+    }
+  ],
+  "events": [
+    {
+      "id": 68967868,
+      "sortOrder": "BbVF9-0253qw+",
+      "level": 1,
+      "num": 45122,
+      "sportId": 138457,
+      "kind": 1,
+      "rootKind": 1,
+      "team1Id": 784617,
+      "team2Id": 862342,
+      "team1": "Nuclear TigeRES",
+      "team2": "FOKUS",
+      "name": "",
+      "startTime": 1792010700,
+      "place": "live",
+      "priority": 2
+    },
+    {
+      "id": 68933015,
+      "sortOrder": "BbTm8XX24xKL+",
+      "level": 1,
+      "num": 43235,
+      "sportId": 144795,
+      "kind": 1,
+      "rootKind": 1,
+      "team1Id": 900510,
+      "team2Id": 905476,
+      "team1": "Dawn Bulls",
+      "team2": "salamit",
+      "name": "",
+      "startTime": 1792005000,
+      "place": "live",
+      "statisticsTypes": "+--",
+      "priority": 2,
+      "tv": [
+        17
+      ],
+      "applicability": [
+        "sport-live"
+      ]
+    },
+    {
+      "id": 68966439,
+      "parentId": 68933015,
+      "sortOrder": "BbTm8XX24xKL+++S253Ub",
+      "level": 2,
+      "num": 43693,
+      "sportId": 144795,
+      "kind": 102003,
+      "rootKind": 102000,
+      "team1Id": 0,
+      "team2Id": 0,
+      "name": "3-я карта",
+      "startTime": 1792005000,
+      "place": "live",
+      "priority": 2,
+      "substituteRootEvent": true
+    }
+  ],
+  "customFactors": [
+    {
+      "e": 68933015,
+      "countAll": 4,
+      "factors": [
+        {
+          "f": 921,
+          "v": 1.43
+        },
+        {
+          "f": 923,
+          "v": 2.45
+        }
+      ]
+    },
+    {
+      "e": 68966439,
+      "countAll": 4,
+      "factors": [
+        {
+          "f": 921,
+          "v": 1.43
+        },
+        {
+          "f": 923,
+          "v": 2.45
+        }
+      ]
+    },
+    {
+      "e": 68967868,
+      "countAll": 2,
+      "factors": [
+        {
+          "f": 921,
+          "v": 1.28
+        },
+        {
+          "f": 923,
+          "v": 3.3
+        }
+      ]
+    }
+  ]
+}

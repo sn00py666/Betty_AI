@@ -28,7 +28,6 @@ class Settings(RankingSettings):
 
     ai_api_key: SecretStr | None = None
     ai_base_url: str = "https://openrouter.ai/api/v1"
-    ai_daily_limit: int = Field(default=500, ge=0)
     ai_model: str = "google/gemini-2.5-flash-lite"
     ai_temperature: float = Field(default=0.35, ge=0, le=2)
     admin_user_ids: list[int] = Field(default_factory=list)

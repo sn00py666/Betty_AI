@@ -18,10 +18,18 @@ import httpx
 from protego import Protego
 
 from config import RankingSettings
-from integrations.bookmakers import SOURCES, parse_response
+from integrations.bookmakers import LIVE_URLS, SOURCES, parse_response
 from integrations.browser import BROWSER_URLS, load_rendered, load_winline
 from integrations.errors import StopSource
-from services.collection_schedule import FAST_INTERVAL, LIVE_SOURCES, hot_sports, next_start_check
+from services.collection_schedule import (
+    BROWSER_SOURCES,
+    FAST_INTERVAL,
+    HTTP_LIVE_SOURCES,
+    LIVE_DISCOVERY_INTERVAL,
+    LIVE_SOURCES,
+    hot_sports,
+    next_start_check,
+)
 from services.dota_rankings import enabled_sources, run_dota_rankings
 from services.freshness import LIVE_TTL, PREMATCH_TTL
 from services.health import heartbeat
@@ -62,11 +70,11 @@ def retry_after(value, now):
 async def request(client, url, headers=None, *, robots=False):
     request_headers = {**HEADERS, "Accept": "text/plain,*/*;q=0.5" if robots else "*/*", **(headers or {})}
     async with client.stream("GET", url, headers=request_headers) as response:
+        if response.status_code == 304:
+            return response, ""
         if response.status_code in (401, 403, 451) or response.is_redirect:
             raise StopSource(f"HTTP {response.status_code}: доступ ограничен или адрес изменился")
         if robots and response.status_code in (404, 410):
-            return response, ""
-        if response.status_code == 304:
             return response, ""
         response.raise_for_status()
         body = bytearray()
@@ -95,6 +103,28 @@ def schedule_snapshots(directory):
     return snapshots
 
 
+def preserved_matches(previous, updates, *, live_only=False, sports=None, keep_live=False):
+    identities = {(m.get("sport", "cs2"), m["id"]) for m in updates}
+    preserved = []
+    for match in previous.get("matches", []):
+        if (match.get("sport", "cs2"), match["id"]) in identities:
+            continue
+        keep = (
+            (live_only and match["status"] == "prematch")
+            or (sports and match.get("sport", "cs2") not in sports)
+            or (keep_live and match["status"] == "live")
+        )
+        if keep:
+            preserved.append(
+                {
+                    **match,
+                    "fetched_at": match.get("fetched_at") or previous["fetched_at"],
+                    "expires_at": match.get("expires_at") or previous["expires_at"],
+                }
+            )
+    return preserved
+
+
 async def collect_one(name, client, directory=DATA):
     folder = directory / name
     folder.mkdir(parents=True, exist_ok=True)
@@ -107,7 +137,8 @@ async def collect_one(name, client, directory=DATA):
     active = hot_sports(snapshots, now) if name in LIVE_SOURCES else set()
     state.setdefault("last_full_success", state.get("last_success", 0))
     full_due = state["last_full_success"] + INTERVAL
-    sports = active if active and now < full_due else None
+    live_only = name in HTTP_LIVE_SOURCES and now < full_due
+    sports = active if name in BROWSER_SOURCES and active and now < full_due else None
     rules = Protego.parse(state.get("robots", ""))
     crawl_delay = rules.crawl_delay(ROBOTS_AGENT) or 0
     # Быстрый режим может сократить обычную паузу, но никогда — backoff после ошибки.
@@ -119,10 +150,11 @@ async def collect_one(name, client, directory=DATA):
     if now < state.get("next_request", 0):
         return
     # Записываем ДО сети: авария или перезапуск не должны создавать частые запросы.
-    state["next_request"] = now + max(FAST_INTERVAL if active else INTERVAL, crawl_delay)
+    interval = FAST_INTERVAL if active else LIVE_DISCOVERY_INTERVAL if name in HTTP_LIVE_SOURCES else INTERVAL
+    state["next_request"] = now + max(interval, crawl_delay)
     state["last_attempt"] = now
     save_json(state_path, state)
-    url = SOURCES[name]
+    url = LIVE_URLS[name] if live_only and name in LIVE_URLS else SOURCES[name]
     text = None
     try:
         rendered = name in ("leon", "betboom")
@@ -151,12 +183,14 @@ async def collect_one(name, client, directory=DATA):
             if name in ("fonbet", "pari")
             else "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         }
-        raw_path = folder / "response.gz"
+        separate_live_cache = live_only and name in LIVE_URLS
+        cache_prefix = "live_" if separate_live_cache else ""
+        raw_path = folder / ("live-response.gz" if separate_live_cache else "response.gz")
         if raw_path.exists():
-            if state.get("etag"):
-                headers["If-None-Match"] = state["etag"]
-            if state.get("last_modified"):
-                headers["If-Modified-Since"] = state["last_modified"]
+            if state.get(cache_prefix + "etag"):
+                headers["If-None-Match"] = state[cache_prefix + "etag"]
+            if state.get(cache_prefix + "last_modified"):
+                headers["If-Modified-Since"] = state[cache_prefix + "last_modified"]
         if rendered:
             pass  # Линия уже загружена вместе с robots.txt в одном браузерном сеансе.
         elif name == "winline":
@@ -172,8 +206,10 @@ async def collect_one(name, client, directory=DATA):
                 raise StopSource("HTTP 304 без локального ответа")
             text = gzip.decompress(raw_path.read_bytes()).decode()
         matches = parse_response(name, text, datetime.now(UTC).isoformat())
+        if live_only:
+            matches = [m for m in matches if m["status"] == "live"]
         # Пустой список после непустого может означать изменение формата, а не исчезновение линии.
-        if not matches:
+        if not matches and not live_only:
             raise ValueError("Нет подходящих матчей; старый снимок не обновлён")
         if any(
             not isinstance(match.get(side), str) or not match[side].strip()
@@ -188,6 +224,7 @@ async def collect_one(name, client, directory=DATA):
         timed_matches = [
             {
                 **match,
+                "fetched_at": match.get("fetched_at") or datetime.fromtimestamp(fetched, UTC).isoformat(),
                 "expires_at": datetime.fromtimestamp(
                     (datetime.fromisoformat(match["fetched_at"]).timestamp() if match.get("fetched_at") else fetched)
                     + (LIVE_TTL if match["status"] == "live" else INTERVAL),
@@ -196,11 +233,17 @@ async def collect_one(name, client, directory=DATA):
             }
             for match in matches
         ]
-        if sports:
-            # Непроверенная дисциплина сохраняет прежние даты свежести, а не время быстрого прохода.
+        if sports or live_only or name == "marathon":
+            # Частичный проход не освежает сохранённый прематч или другую дисциплину.
             previous = read_json(folder / "latest.json", {})
             timed_matches.extend(
-                match for match in previous.get("matches", []) if match.get("sport", "cs2") not in sports
+                preserved_matches(
+                    previous,
+                    timed_matches,
+                    sports=sports,
+                    live_only=live_only,
+                    keep_live=name == "marathon" and not live_only,
+                )
             )
         snapshot = {
             "bookmaker": name,
@@ -217,16 +260,23 @@ async def collect_one(name, client, directory=DATA):
             temporary = raw_path.with_suffix(".tmp")
             temporary.write_bytes(gzip.compress(text.encode()))
             temporary.replace(raw_path)
-            state.update(etag=response.headers.get("etag"), last_modified=response.headers.get("last-modified"))
+            state[cache_prefix + "etag"] = response.headers.get("etag")
+            state[cache_prefix + "last_modified"] = response.headers.get("last-modified")
         save_json(folder / "latest.json", snapshot)
         state.update(
             digest=digest, failures=0, error=None, paused=False, last_success=fetched, http_status=response.status_code
         )
-        if not sports:
+        if not sports and not live_only:
             state["last_full_success"] = fetched
         snapshots = schedule_snapshots(directory)
         active = hot_sports(snapshots, fetched) if name in LIVE_SOURCES else set()
-        delay = FAST_INTERVAL if active else INTERVAL + random.uniform(0, 60)
+        delay = (
+            FAST_INTERVAL
+            if active
+            else LIVE_DISCOVERY_INTERVAL
+            if name in HTTP_LIVE_SOURCES
+            else INTERVAL + random.uniform(0, 60)
+        )
         due = fetched + delay
         if name in LIVE_SOURCES:
             due = min(due, state["last_full_success"] + INTERVAL, next_start_check(snapshots, fetched))
@@ -285,7 +335,7 @@ async def collect_loop(names, watch):
 
         async def worker(name):
             while True:
-                if name in LIVE_SOURCES:
+                if name in BROWSER_SOURCES:
                     # На сервере одновременно работает не более одного Chrome.
                     async with browser_slot:
                         await collect_one(name, client)

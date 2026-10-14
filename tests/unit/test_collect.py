@@ -6,7 +6,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from collect import INTERVAL, collect_one, read_json, retry_after, save_json
+from collect import collect_one, read_json, retry_after, save_json
 from integrations.bookmakers import (
     PARSERS,
     parse_betboom,
@@ -16,6 +16,7 @@ from integrations.bookmakers import (
     parse_pari,
     parse_winline,
 )
+from services.collection_schedule import LIVE_DISCOVERY_INTERVAL
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 
@@ -111,7 +112,7 @@ async def test_cache_and_restart_cooldown(directory):
         return httpx.Response(200, text=(FIXTURES / "fonbet.json").read_text(), headers={"ETag": '"v1"'})
 
     state = await execute(directory, handler)
-    assert state["next_request"] > time.time() + INTERVAL - 2
+    assert state["next_request"] > time.time() + LIVE_DISCOVERY_INTERVAL - 2
     await execute(directory, handler)
     assert len(calls) == 1
     assert (directory / "fonbet" / "latest.json").exists()
@@ -123,7 +124,8 @@ async def test_cache_and_restart_cooldown(directory):
         assert request.headers["If-None-Match"] == '"v1"'
         return httpx.Response(304)
 
-    await execute(directory, unchanged)
+    state = await execute(directory, unchanged)
+    assert not state["paused"] and state["error"] is None
     assert len((directory / "fonbet" / "history.jsonl").read_text().splitlines()) == 1
 
 
