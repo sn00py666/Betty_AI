@@ -23,10 +23,10 @@ from integrations.browser import BROWSER_URLS, load_rendered, load_winline
 from integrations.errors import StopSource
 from services.collection_schedule import (
     BROWSER_SOURCES,
-    FAST_INTERVAL,
     HTTP_LIVE_SOURCES,
     LIVE_DISCOVERY_INTERVAL,
     LIVE_SOURCES,
+    fast_delay,
     hot_sports,
     next_start_check,
 )
@@ -75,6 +75,10 @@ async def request(client, url, headers=None, *, robots=False):
     async with client.stream("GET", url, headers=request_headers) as response:
         if response.status_code == 304:
             return response, ""
+        if response.is_redirect and urlsplit(url).hostname == urlsplit(SOURCES["marathon"]).hostname:
+            # Временный редирект Марафона не должен навсегда выключать исходный адрес.
+            # Адрес назначения не посещаем; повторяем исходный после backoff.
+            response.raise_for_status()
         if response.status_code in (401, 403, 451) or response.is_redirect:
             raise StopSource(f"HTTP {response.status_code}: доступ ограничен или адрес изменился")
         if robots and response.status_code in (404, 410):
@@ -146,14 +150,18 @@ async def collect_one(name, client, directory=DATA):
     crawl_delay = rules.crawl_delay(ROBOTS_AGENT) or 0
     # Быстрый режим может сократить обычную паузу, но никогда — backoff после ошибки.
     if active and state.get("last_success") and not state.get("failures") and not state.get("error"):
-        state["next_request"] = min(
-            state.get("next_request", 0),
-            max(state["last_success"], state.get("last_attempt", 0)) + max(FAST_INTERVAL, crawl_delay),
-        )
+        old_delay, old_due = state.get("fast_delay"), state.get("next_request", 0)
+        delay = fast_delay(state)
+        due = max(state["last_success"], state.get("last_attempt", 0)) + max(delay, crawl_delay)
+        # При переходе со старого интервала обновляем и уже назначенный быстрый проход.
+        choose = max if old_delay != delay and state.get("refresh_mode") == "fast" else min
+        state["next_request"] = choose(old_due, due)
+        if old_delay != delay or old_due != state["next_request"]:
+            save_json(state_path, state)
     if now < state.get("next_request", 0):
         return
     # Записываем ДО сети: авария или перезапуск не должны создавать частые запросы.
-    interval = FAST_INTERVAL if active else LIVE_DISCOVERY_INTERVAL if name in HTTP_LIVE_SOURCES else INTERVAL
+    interval = fast_delay(state) if active else LIVE_DISCOVERY_INTERVAL if name in HTTP_LIVE_SOURCES else INTERVAL
     state["next_request"] = now + max(interval, crawl_delay)
     state["last_attempt"] = now
     save_json(state_path, state)
@@ -275,14 +283,14 @@ async def collect_one(name, client, directory=DATA):
         # ISO timestamps round to microseconds and can be just ahead of the raw float.
         active = hot_sports(snapshots, time.time()) if name in LIVE_SOURCES else set()
         delay = (
-            FAST_INTERVAL
+            fast_delay(state, renew=True)
             if active
             else LIVE_DISCOVERY_INTERVAL
             if name in HTTP_LIVE_SOURCES
             else INTERVAL + random.uniform(0, 60)
         )
         due = fetched + delay
-        if name in LIVE_SOURCES:
+        if name in LIVE_SOURCES and not active:
             due = min(due, state["last_full_success"] + INTERVAL, next_start_check(snapshots, fetched))
         state["next_request"] = max(due, fetched + (rules.crawl_delay(ROBOTS_AGENT) or 0))
         state["refresh_mode"] = "fast" if active else "prematch"
@@ -291,7 +299,19 @@ async def collect_one(name, client, directory=DATA):
     except httpx.HTTPStatusError as error:
         code = error.response.status_code
         state["http_status"] = code
-        if code == 429 or code >= 500:
+        if name == "marathon" and 300 <= code < 400:
+            failures = state.get("failures", 0) + 1
+            delay = max(
+                min(3600, 300 * 2 ** min(failures - 1, 4)),
+                retry_after(error.response.headers.get("retry-after"), time.time()),
+            )
+            state.update(
+                paused=False,
+                failures=failures,
+                next_request=time.time() + delay,
+                error=f"HTTP {code}: временное перенаправление, повтор исходного адреса",
+            )
+        elif code == 429 or code >= 500:
             failures = state.get("failures", 0) + 1
             delay = min(86400, INTERVAL * 2 ** min(failures, 6))
             delay = max(delay, retry_after(error.response.headers.get("retry-after"), time.time()))

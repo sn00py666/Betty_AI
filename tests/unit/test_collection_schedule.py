@@ -44,11 +44,14 @@ def test_wake_up_before_start_instead_of_waiting_full_interval():
 
 
 @pytest.mark.parametrize("failures", [0, 1])
-async def test_fast_pass_preserves_other_sport_and_error_backoff(tmp_path, monkeypatch, failures):
+@pytest.mark.parametrize("near_full_refresh", [False, True])
+async def test_fast_pass_preserves_other_sport_and_error_backoff(tmp_path, monkeypatch, failures, near_full_refresh):
     clock = NOW.timestamp()
+    monkeypatch.setattr("services.collection_schedule.random.uniform", lambda a, b: 0)
     monkeypatch.setattr(collect.time, "time", lambda: clock)
     folder = tmp_path / "winline"
     folder.mkdir()
+    last_full = clock - PREMATCH_TTL + 10 if near_full_refresh else clock - 120
     old = (NOW - timedelta(minutes=5)).isoformat()
     untouched = {
         "id": "dota",
@@ -71,7 +74,7 @@ async def test_fast_pass_preserves_other_sport_and_error_backoff(tmp_path, monke
             "robots": "User-agent: *\nAllow: /",
             "robots_checked": clock,
             "last_success": clock - 120,
-            "last_full_success": clock - 120,
+            "last_full_success": last_full,
             "next_request": clock + 1000,
             "failures": failures,
         },
@@ -104,7 +107,7 @@ async def test_fast_pass_preserves_other_sport_and_error_backoff(tmp_path, monke
     assert datetime.fromisoformat(data["matches"][0]["expires_at"]).timestamp() == clock + LIVE_TTL
     state = collect.read_json(folder / "state.json", {})
     assert state["next_request"] == clock + FAST_INTERVAL
-    assert state["last_full_success"] == clock - 120
+    assert state["last_full_success"] == last_full
     assert state["refresh_mode"] == "fast"
     # Перезапуск до срока не создаёт повторный запрос.
     async with httpx.AsyncClient() as client:
@@ -129,9 +132,10 @@ async def test_slow_browser_does_not_block_http_sources(monkeypatch):
     assert http_finished.is_set()
 
 
-@pytest.mark.parametrize("crawl_delay,last_attempt,wait", [(0, 0, False), (120, 0, True), (0, 1, True)])
+@pytest.mark.parametrize("crawl_delay,last_attempt,wait", [(0, 0, False), (240, 0, True), (0, 1, True)])
 async def test_full_refresh_crawl_delay_and_crash_reservation(tmp_path, monkeypatch, crawl_delay, last_attempt, wait):
     clock = NOW.timestamp()
+    monkeypatch.setattr("services.collection_schedule.random.uniform", lambda a, b: 0)
     monkeypatch.setattr(collect.time, "time", lambda: clock)
     folder = tmp_path / "winline"
     folder.mkdir()
@@ -141,9 +145,9 @@ async def test_full_refresh_crawl_delay_and_crash_reservation(tmp_path, monkeypa
         {
             "robots": f"User-agent: *\nAllow: /\nCrawl-delay: {crawl_delay}",
             "robots_checked": clock,
-            "last_success": clock - 60,
+            "last_success": clock - FAST_INTERVAL - 1,
             "last_full_success": clock - PREMATCH_TTL - 1,
-            "last_attempt": clock if last_attempt else clock - 60,
+            "last_attempt": clock if last_attempt else clock - FAST_INTERVAL - 1,
             "next_request": clock + 30,
         },
     )
@@ -174,3 +178,38 @@ async def test_full_refresh_crawl_delay_and_crash_reservation(tmp_path, monkeypa
         assert state["last_full_success"] == clock
         assert state["refresh_mode"] == "prematch"
         assert state["next_request"] == clock + PREMATCH_TTL
+
+
+@pytest.mark.parametrize("jitter", [-10, 10])
+async def test_fast_jitter_is_persisted_and_not_resampled_or_shortened(tmp_path, monkeypatch, jitter):
+    from services.collection_schedule import fast_delay
+
+    clock = NOW.timestamp()
+    sampled = []
+
+    def uniform(a, b):
+        sampled.append((a, b))
+        return jitter
+
+    monkeypatch.setattr("services.collection_schedule.random.uniform", uniform)
+    state = dict(
+        robots="User-agent: *\nAllow: /",
+        robots_checked=clock,
+        last_success=clock,
+        last_attempt=clock,
+        last_full_success=clock,
+        refresh_mode="fast",
+    )
+    state["next_request"] = clock + fast_delay(state, renew=True)
+    folder = tmp_path / "marathon"
+    folder.mkdir()
+    collect.save_json(folder / "state.json", state)
+    collect.save_json(folder / "latest.json", snapshot(dict(status="live", sport="cs2")))
+    monkeypatch.setattr(collect.time, "time", lambda: clock + FAST_INTERVAL + jitter - 1)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _: pytest.fail("Too early"))) as client:
+        await collect.collect_one("marathon", client, tmp_path)
+        await collect.collect_one("marathon", client, tmp_path)
+    saved = collect.read_json(folder / "state.json", {})
+    assert saved["next_request"] == clock + 120 + jitter
+    assert saved["fast_delay"] == 120 + jitter
+    assert sampled == [(-10, 10)]

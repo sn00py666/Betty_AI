@@ -9,7 +9,7 @@ import pytest
 
 from collect import collect_one, read_json, save_json
 from integrations.bookmakers import LIVE_URLS, SOURCES, parse_marathon, parse_response
-from services.collection_schedule import FAST_INTERVAL, LIVE_DISCOVERY_INTERVAL
+from services.collection_schedule import FAST_INTERVAL, FAST_JITTER, LIVE_DISCOVERY_INTERVAL
 from services.freshness import LIVE_TTL
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
@@ -124,7 +124,7 @@ async def test_live_refresh_promotes_event_removes_finished_and_preserves_premat
     else:
         assert live and state["refresh_mode"] == "fast"
         assert len([m for m in data["matches"] if m["id"] == promoted_id]) == 1
-        assert state["next_request"] >= now + FAST_INTERVAL
+        assert state["next_request"] >= now + FAST_INTERVAL - FAST_JITTER
         for m in live:
             age = datetime.fromisoformat(m["expires_at"]) - datetime.fromisoformat(m["fetched_at"])
             assert age.total_seconds() == LIVE_TTL

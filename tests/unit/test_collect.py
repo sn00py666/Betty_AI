@@ -348,3 +348,40 @@ def test_draw_market_is_excluded_even_when_draw_is_blocked():
     market = next(f for f in data["customFactors"] if str(f["e"]) == target)
     market["factors"].append({"f": 922, "v": 3.2, "blocked": True})
     assert target not in {m["id"] for m in parse_fonbet(json.dumps(data))}
+
+
+def test_marathon_outright_market_does_not_discard_normal_matches():
+    normal = (FIXTURES / "marathon.html").read_text()
+    outright = (FIXTURES / "marathon-outright.html").read_text()
+    assert parse_marathon(normal + outright) == parse_marathon(normal)
+    assert parse_marathon(outright) == []
+
+
+@pytest.mark.parametrize("status", [301, 302, 307, 308])
+async def test_marathon_redirect_retries_original_address_after_restart(tmp_path, monkeypatch, status):
+    clock = time.time()
+    monkeypatch.setattr("collect.time.time", lambda: clock)
+    folder = tmp_path / "marathon"
+    folder.mkdir()
+    save_json(folder / "state.json", dict(robots="User-agent: *\nAllow: /", robots_checked=clock))
+    calls = []
+
+    def handler(request):
+        calls.append(str(request.url))
+        if len(calls) == 1:
+            return httpx.Response(status, headers={"Location": "https://untrusted.example/", "Retry-After": "600"})
+        return httpx.Response(200, text=(FIXTURES / "marathon.html").read_text())
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        await collect_one("marathon", client, tmp_path)
+        state = read_json(folder / "state.json", {})
+        assert state["paused"] is False and state["http_status"] == status
+        assert state["next_request"] == clock + 600
+        await collect_one("marathon", client, tmp_path)
+        assert len(calls) == 1
+        clock += 600
+        await collect_one("marathon", client, tmp_path)
+    assert len(calls) == 2 and calls[0] == calls[1]
+    state = read_json(folder / "state.json", {})
+    assert state["error"] is None and state["failures"] == 0
+    assert read_json(folder / "latest.json", {})["matches"]

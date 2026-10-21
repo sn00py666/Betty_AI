@@ -105,6 +105,9 @@ def parse_marathon(text, captured_at=None, url=None):
         if not re.search(r"\b(?:CS\s*2|Dota\s*2)\.", tournament, re.I):
             continue
         for row in category.select("[data-event-name][data-live]"):
+            # Итог турнира — многокомандный рынок, а не повреждённая карточка матча.
+            if "/Outright/" in row.get("data-event-path", "") or row.select_one(".outright"):
+                continue
             if row["data-live"] not in ("true", "false"):
                 continue
             live = row["data-live"] == "true"

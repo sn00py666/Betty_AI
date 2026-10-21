@@ -1,15 +1,31 @@
 """Общие сроки свежести и приоритеты обновления линии."""
 
+import random
+
 from services.freshness import LIVE_TTL, PREMATCH_TTL
 from services.matches import date
 
-FAST_INTERVAL = 30
+FAST_INTERVAL = 120
+FAST_JITTER = 10
 START_WINDOW = 600
 START_GRACE = 1800
 BROWSER_SOURCES = frozenset({"winline", "leon", "betboom"})
 HTTP_LIVE_SOURCES = frozenset({"fonbet", "pari", "marathon"})
 LIVE_SOURCES = BROWSER_SOURCES | HTTP_LIVE_SOURCES
 LIVE_DISCOVERY_INTERVAL = 300
+
+
+def fast_delay(state, *, renew=False):
+    """Одна случайная задержка на цикл, сохраняется вместе с next_request."""
+    delay = state.get("fast_delay")
+    if (
+        renew
+        or not isinstance(delay, int | float)
+        or not FAST_INTERVAL - FAST_JITTER <= delay <= FAST_INTERVAL + FAST_JITTER
+    ):
+        delay = FAST_INTERVAL + random.uniform(-FAST_JITTER, FAST_JITTER)
+        state["fast_delay"] = delay
+    return delay
 
 
 def hot_sports(snapshots, now):
