@@ -7,6 +7,7 @@ from services.emojis import bookmaker_name, team_emoji
 from services.factors import factor_summary, factors
 from services.forecasts import favorite_side
 from services.matches import BOOKMAKERS, start_label
+from services.partners import public_offers
 from services.team_names import canonical_match, canonical_text
 
 
@@ -70,6 +71,7 @@ def render(match, commentary=None):
 
 def render_offers(match, favorite=None):
     match = canonical_match(match)
+    match = {**match, "offers": public_offers(match["offers"])}
     favorite = favorite if favorite in ("team1", "team2") else None
     first, second = escape(match["team1"]), escape(match["team2"])
     lines = []

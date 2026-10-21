@@ -10,6 +10,7 @@ from aiogram.methods import SendMessage
 from services.health import api_state, read, safe_error, write
 from services.matches import BOOKMAKERS
 from services.monitoring import Monitor
+from services.partners import active_bookmakers
 
 
 @pytest.fixture
@@ -45,13 +46,13 @@ def states(monitor):
 def test_report_all_sources_no_network_or_credentials(tmp_path, settings):
     healthy(tmp_path)
     monitor = Monitor(settings, tmp_path)
-    state_path = tmp_path / "odds" / "betboom" / "state.json"
+    state_path = tmp_path / "odds" / "marathon" / "state.json"
     write(state_path, dict(paused=True, error="HTTP 401: https://example.test/?token=secret"))
     items = states(monitor)
-    assert items["BetBoom"]["code"] == "blocked"
-    assert "secret" not in items["BetBoom"]["detail"]
+    assert items["Марафон"]["code"] == "blocked"
+    assert "secret" not in items["Марафон"]["detail"]
     assert all(items[name]["code"] == "ok" for name in ("Telegram-бот", "Сборщик", "PandaScore", "Valve VRS"))
-    assert set(BOOKMAKERS.values()) <= items.keys()
+    assert {BOOKMAKERS[n] for n in active_bookmakers()} <= items.keys()
     assert len(monitor.report()) < 4096
     assert "доступ ограничен" in monitor.report()
     assert "123456:ABCdef1234567890_ABCdef1234" not in safe_error("123456:ABCdef1234567890_ABCdef1234")
@@ -61,8 +62,8 @@ def test_stale_offline_budget_and_corrupt_state_are_visible(tmp_path, settings):
     healthy(tmp_path)
     monitor = Monitor(settings, tmp_path)
     write(tmp_path / "health" / "bot.json", dict(updated_at=time.time() - 200))
-    write(tmp_path / "odds" / "pari" / "latest.json", dict(fetched_at="2020-01-01T00:00:00Z", matches=[]))
-    (tmp_path / "odds" / "leon" / "state.json").write_text("{invalid")
+    write(tmp_path / "odds" / "marathon" / "latest.json", dict(fetched_at="2020-01-01T00:00:00Z", matches=[]))
+    (tmp_path / "odds" / "winline" / "state.json").write_text("{invalid")
     write(tmp_path / "health" / "collector.json", dict(updated_at="invalid"))
     write(tmp_path / "pandascore.json", dict(budget=dict(day=datetime.now(UTC).date().isoformat(), used=100)))
     api_state(tmp_path / "health" / "ai.json", error="HTTP 429", status=429, retry_at=time.time() + 3600)
@@ -70,8 +71,8 @@ def test_stale_offline_budget_and_corrupt_state_are_visible(tmp_path, settings):
     items = states(monitor)
     assert items["Telegram-бот"]["code"] == "offline"
     assert items["Сборщик"]["code"] == "error"
-    assert items[BOOKMAKERS["pari"]]["code"] == "stale"
-    assert items[BOOKMAKERS["leon"]]["code"] == "error"
+    assert items[BOOKMAKERS["marathon"]]["code"] == "stale"
+    assert items[BOOKMAKERS["winline"]]["code"] == "error"
     assert items["PandaScore"]["code"] == "limited"
     assert items["OpenRouter AI"]["code"] == "limited"
     assert items["Valve VRS"]["code"] == "stale"
@@ -107,7 +108,7 @@ async def test_matching_review_alerts_once_and_recovers(tmp_path, settings):
 async def test_problem_once_after_restart_and_recovery_once(tmp_path, settings):
     healthy(tmp_path)
     bot = SimpleNamespace(send_message=AsyncMock())
-    path = tmp_path / "odds" / "betboom" / "state.json"
+    path = tmp_path / "odds" / "marathon" / "state.json"
     write(path, dict(paused=True, error="HTTP 403"))
     await Monitor(settings, tmp_path).check(bot)
     await Monitor(settings, tmp_path).check(bot)
@@ -122,7 +123,7 @@ async def test_problem_once_after_restart_and_recovery_once(tmp_path, settings):
 
 async def test_delivery_failure_keeps_pending_alert(tmp_path, settings):
     healthy(tmp_path)
-    write(tmp_path / "odds" / "betboom" / "state.json", dict(error="HTTP 403"))
+    write(tmp_path / "odds" / "marathon" / "state.json", dict(error="HTTP 403"))
     bot = SimpleNamespace(
         send_message=AsyncMock(
             side_effect=TelegramForbiddenError(method=SendMessage(chat_id=850362750, text="test"), message="Forbidden")

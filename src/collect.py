@@ -34,6 +34,7 @@ from services.dota_rankings import enabled_sources, run_dota_rankings
 from services.freshness import LIVE_TTL, PREMATCH_TTL
 from services.health import heartbeat
 from services.hltv_collection import run_hltv
+from services.partners import active_bookmakers
 from services.rankings import run_rankings
 from services.team_matching import run_team_matching
 
@@ -93,7 +94,7 @@ async def request(client, url, headers=None, *, robots=False):
 
 def schedule_snapshots(directory):
     snapshots = []
-    for name in SOURCES:
+    for name in active_bookmakers():
         try:
             snapshot = read_json(directory / name / "latest.json", {})
             if isinstance(snapshot, dict) and isinstance(snapshot.get("matches", []), list):
@@ -381,11 +382,11 @@ async def run(names, watch):
 
 def main():
     parser = argparse.ArgumentParser(description="Адаптивный сбор прематча и LIVE CS2 / Dota 2")
-    parser.add_argument("bookmakers", nargs="*", help="fonbet marathon pari betboom leon winline")
+    parser.add_argument("bookmakers", nargs="*", help=" ".join(active_bookmakers()))
     parser.add_argument("--watch", action="store_true", help="оставаться запущенным и соблюдать сохранённые паузы")
     args = parser.parse_args()
-    names = list(dict.fromkeys(args.bookmakers or SOURCES))
-    if unknown := set(names) - SOURCES.keys():
+    names = list(dict.fromkeys(args.bookmakers or active_bookmakers()))
+    if unknown := set(names) - set(active_bookmakers()):
         parser.error(f"Неизвестные букмекеры: {', '.join(sorted(unknown))}")
     DATA.mkdir(parents=True, exist_ok=True)
     with (DATA / "collector.lock").open("a") as lock:

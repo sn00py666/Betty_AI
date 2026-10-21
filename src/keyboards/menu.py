@@ -3,6 +3,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from content import SPORTS
 from services.emojis import bookmaker_icon
 from services.matches import BOOKMAKERS, start_label
+from services.partners import PARTNER_URLS, public_offers
 
 PAGE_SIZE = 5
 
@@ -57,7 +58,7 @@ def match_actions(match, reminder_set=False):
 def offers(match, favorite=None):
     rows = []
     side = "p2" if favorite == "team2" else "p1"
-    for offer in sorted(match["offers"], key=lambda o: o[side] or 0, reverse=True):
+    for offer in sorted(public_offers(match["offers"]), key=lambda o: o[side] or 0, reverse=True):
         if offer["p1"] is None and offer["p2"] is None:
             continue
         first_price, second_price = (offer["p2"], offer["p1"]) if favorite == "team2" else (offer["p1"], offer["p2"])
@@ -80,10 +81,13 @@ def bonuses(offers):
     rows = [
         [
             InlineKeyboardButton(
-                text=BOOKMAKERS[o.bookmaker], url=str(o.url), icon_custom_emoji_id=bookmaker_icon(o.bookmaker)
+                text=BOOKMAKERS[o.bookmaker],
+                url=PARTNER_URLS[o.bookmaker],
+                icon_custom_emoji_id=bookmaker_icon(o.bookmaker),
             )
         ]
         for o in offers
+        if o.bookmaker in PARTNER_URLS and o.enabled
     ]
     rows.extend(navigation().inline_keyboard[:1])
     return InlineKeyboardMarkup(inline_keyboard=rows)

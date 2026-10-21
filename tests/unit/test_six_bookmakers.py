@@ -34,7 +34,7 @@ def test_same_dota_match_from_all_six_bookmakers(tmp_path):
                 dict(fetched_at=now.isoformat(), expires_at=(now + timedelta(minutes=30)).isoformat(), matches=[match])
             )
         )
-    matches = Matches(tmp_path).read(now)
+    matches = Matches(tmp_path, bookmakers=SOURCES).read(now)
     assert len(matches) == 1
     assert {o["bookmaker"]: (o["p1"], o["p2"]) for o in matches[0]["offers"]} == expected
 

@@ -77,12 +77,12 @@ def matches(tmp_path):
     from services.matches import Matches
 
     now = datetime.now(UTC)
-    data = snapshot(tmp_path, "pari", starts_at=(now + timedelta(hours=2)).isoformat())
+    data = snapshot(tmp_path, "marathon", starts_at=(now + timedelta(hours=2)).isoformat())
     data["fetched_at"] = now.isoformat()
     data["expires_at"] = (now + timedelta(minutes=30)).isoformat()
     import json
 
-    (tmp_path / "pari" / "latest.json").write_text(json.dumps(data))
+    (tmp_path / "marathon" / "latest.json").write_text(json.dumps(data))
     return Matches(tmp_path)
 
 
@@ -132,7 +132,7 @@ async def test_real_analysis_then_actual_bookmaker_link(dispatcher, bot, users, 
     assert rows[0][0].text == "🔔 Напомнить за 30 минут"
     menu.asyncio.sleep.assert_awaited_once_with(6)
     offers = requests(bot, SendMessage)[-1]
-    assert offers.reply_markup.inline_keyboard[0][0].url == "https://pari.ru/sports/10"
+    assert offers.reply_markup.inline_keyboard[0][0].url == "https://bett1.pro/click?o=354&a=53074&tsource=1015"
 
 
 @pytest.mark.parametrize("callback", ["match:missing", "sport:missing", "offer:0", "remind:missing"])

@@ -41,7 +41,7 @@ def client(relation="same_team", evidence="abbreviation", *, content=None, statu
 
 def pair(folder, **changes):
     odds = folder / "odds"
-    snapshot(odds, "leon", team1="Eastern Dragons", team2="Opponent")
+    snapshot(odds, "marathon", team1="Eastern Dragons", team2="Opponent")
     snapshot(odds, "winline", **(dict(team1="Opponent", team2="EDG", p1=1.8, p2=2.2) | changes))
     return Matches(odds)
 
@@ -132,7 +132,7 @@ async def test_ambiguous_candidates_remain_separate_after_llm_accepts_names(tmp_
 
 async def test_unknown_live_time_requires_accepted_names_and_unique_sources(tmp_path, settings):
     odds = tmp_path / "odds"
-    snapshot(odds, "leon", team1="Eastern Dragons", team2="Opponent", status="live", starts_at=None)
+    snapshot(odds, "marathon", team1="Eastern Dragons", team2="Opponent", status="live", starts_at=None)
     snapshot(odds, "winline", team1="EDG", team2="Opponent", status="live", starts_at=None)
     provider = client()
     state = await TeamMatcher(settings, tmp_path).scan(provider, NOW.timestamp())

@@ -33,8 +33,8 @@ def match():
         starts_at=(now + timedelta(hours=2)).isoformat(),
         statistics={"updated_at": now.timestamp()},
         offers=[
-            dict(bookmaker="pari", p1=3.0, p2=1.5, url="https://pari.ru/", fetched_at=now.isoformat()),
-            dict(bookmaker="fonbet", p1=1.6, p2=2.4, url="https://fon.bet/", fetched_at=now.isoformat()),
+            dict(bookmaker="marathon", p1=3.0, p2=1.5, url="https://pari.ru/", fetched_at=now.isoformat()),
+            dict(bookmaker="winline", p1=1.6, p2=2.4, url="https://fon.bet/", fetched_at=now.isoformat()),
         ],
     )
 
@@ -114,10 +114,13 @@ def test_team2_favorite_best_price_and_button_order(match):
     assert match["offers"][1]["p1"] == 1.6 and match["offers"][1]["p2"] == 2.4
     assert "Лучший коэффициент на фаворита: <b>2.40</b>" in text
     assert "Лучший на Aurora" not in text
-    assert menu.offers(match, "team2").inline_keyboard[0][0].url == "https://fon.bet/"
+    assert (
+        menu.offers(match, "team2").inline_keyboard[0][0].url
+        == "https://bett1.pro/click?o=159&a=53074&tsource=1015&link_id=5155"
+    )
     match["offers"][0]["p2"] = 2.4
     highlight = render_offers(match, "team2").split("Лучший коэффициент на фаворита:")[1].split("\n")[0]
-    assert "PARI" in highlight and "Фонбет" in highlight
+    assert "Марафон" in highlight and "Winline" in highlight
 
 
 def test_closed_favorite_and_unclear_do_not_recommend_other_team(match):
@@ -157,13 +160,15 @@ def test_bonus_priority_enabled_validation_and_plain_text():
         _env_file=None,
         telegram_bot_token="123:TEST",
         bonus_offers=[
-            dict(bookmaker="pari", priority=20, description="Условия <акции>", url="https://pari.ru/", enabled=True),
-            dict(bookmaker="fonbet", priority=1, description="Оффер", url="https://fon.bet/", enabled=True),
+            dict(
+                bookmaker="marathon", priority=20, description="Условия <акции>", url="https://pari.ru/", enabled=True
+            ),
+            dict(bookmaker="winline", priority=1, description="Оффер", url="https://fon.bet/", enabled=True),
             dict(bookmaker="leon", priority=0, description="Черновик", url="https://leon.ru/"),
         ],
     )
     offers = ordered_offers(settings)
-    assert [o.bookmaker for o in offers] == ["fonbet", "pari"]
+    assert [o.bookmaker for o in offers] == ["winline", "marathon"]
     assert "&lt;акции&gt;" in render_bonus(offers)
     assert "Черновик" not in render_bonus(offers)
     assert "нет опубликованных" in render_bonus([])
@@ -171,7 +176,9 @@ def test_bonus_priority_enabled_validation_and_plain_text():
         Settings(
             _env_file=None,
             telegram_bot_token="123:TEST",
-            bonus_offers=[dict(bookmaker="pari", priority=1, description="Test", url="http://pari.ru/", enabled=True)],
+            bonus_offers=[
+                dict(bookmaker="marathon", priority=1, description="Test", url="http://pari.ru/", enabled=True)
+            ],
         )
 
 
@@ -184,11 +191,11 @@ def test_logo_alias_unknown_team_and_all_six_bookmakers():
 
 
 async def test_telegram_emoji_rejection_falls_back_without_mutating_original(match):
-    method = SendMessage(chat_id=1, text=bookmaker_name("pari", "PARI"), reply_markup=menu.offers(match))
+    method = SendMessage(chat_id=1, text=bookmaker_name("marathon", "Марафон"), reply_markup=menu.offers(match))
     request = AsyncMock(side_effect=[TelegramBadRequest(method=method, message="CUSTOM_EMOJI_INVALID"), True])
     assert await EmojiFallback()(request, None, method)
     fallback = request.call_args_list[1].args[1]
-    assert fallback.text == "PARI"
+    assert fallback.text == "Марафон"
     assert all(b.icon_custom_emoji_id is None for row in fallback.reply_markup.inline_keyboard for b in row)
     assert "tg-emoji" in method.text
     assert method.reply_markup.inline_keyboard[0][0].icon_custom_emoji_id

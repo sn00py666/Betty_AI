@@ -12,6 +12,7 @@ from services.dota_rankings import SOURCES as DOTA_SOURCES
 from services.dota_rankings import available_teams, enabled_sources, load_source, select_ranking
 from services.health import read, safe_error, write
 from services.matches import BOOKMAKERS, MOSCOW, date
+from services.partners import active_bookmakers
 
 logger = logging.getLogger(__name__)
 PROBLEMS = {"error", "blocked", "limited", "stale", "offline", "review"}
@@ -111,7 +112,8 @@ class Monitor:
             else:
                 add(label, "offline", f"Нет сигнала процесса; последний {stamp(seen)}")
 
-        for name, label in BOOKMAKERS.items():
+        for name in active_bookmakers():
+            label = BOOKMAKERS[name]
             folder = self.directory / "odds" / name
             state = load(folder / "state.json", label)
             latest = load(folder / "latest.json", label)

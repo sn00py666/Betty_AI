@@ -16,7 +16,7 @@ def match():
         "best_of": 3,
         "status": "prematch",
         "starts_at": "2026-10-09T16:30:00+00:00",
-        "offers": [{"bookmaker": "pari", "p1": 1.5, "p2": 2.5, "fetched_at": "2026-10-09T12:00:00+00:00"}],
+        "offers": [{"bookmaker": "marathon", "p1": 1.5, "p2": 2.5, "fetched_at": "2026-10-09T12:00:00+00:00"}],
         "statistics": {
             "updated_at": 1791200880,
             "team1": {
@@ -144,7 +144,7 @@ def test_escaping_and_separate_bookmaker_offers(match):
     assert "<Aurora>" not in text
     assert "&lt;Aurora&gt;" in text
     assert "PARI" not in text
-    assert "PARI: П1 1.50 • П2 2.50" in render_offers(match)
+    assert "Марафон: П1 1.50 • П2 2.50" in render_offers(match)
 
 
 def test_dota_does_not_use_rounds_or_map_pool(match):

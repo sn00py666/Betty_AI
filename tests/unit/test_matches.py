@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from integrations.bookmakers import SOURCES
 from services.freshness import LIVE_TTL
 from services.matches import Matches, market_probability
 
@@ -35,7 +36,7 @@ def snapshot(folder, bookmaker, **overrides):
 def test_reversed_teams_and_aliases_keep_correct_prices(tmp_path):
     snapshot(tmp_path, "pari")
     snapshot(tmp_path, "fonbet", team1="Spirit", team2="Natus Vincere", p1=1.6, p2=2.6, url="https://fon.bet/sports/10")
-    matches = Matches(tmp_path).read(NOW)
+    matches = Matches(tmp_path, bookmakers=SOURCES).read(NOW)
     assert len(matches) == 1
     match = matches[0]
     assert match["team1"] == "Spirit"
@@ -56,7 +57,7 @@ def test_reversed_teams_and_aliases_keep_correct_prices(tmp_path):
 def test_uncertain_or_different_events_are_not_merged(tmp_path, changes):
     snapshot(tmp_path, "pari")
     snapshot(tmp_path, "fonbet", url="https://fon.bet/sports/10", **changes)
-    assert len(Matches(tmp_path).read(NOW)) == 2
+    assert len(Matches(tmp_path, bookmakers=SOURCES).read(NOW)) == 2
 
 
 @pytest.mark.parametrize(
@@ -70,7 +71,7 @@ def test_uncertain_or_different_events_are_not_merged(tmp_path, changes):
 )
 def test_invalid_or_closed_markets(tmp_path, changes):
     snapshot(tmp_path, "pari", **changes)
-    items = Matches(tmp_path).read(NOW)
+    items = Matches(tmp_path, bookmakers=SOURCES).read(NOW)
     if "p1" in changes:
         assert market_probability(items[0]) is None
     else:
@@ -80,16 +81,16 @@ def test_invalid_or_closed_markets(tmp_path, changes):
 def test_stale_prematch_and_live_hidden(tmp_path):
     snapshot(tmp_path, "pari")
     snapshot(tmp_path, "fonbet", url="https://fon.bet/sports/10", status="live")
-    assert len(Matches(tmp_path).read(NOW + timedelta(seconds=LIVE_TTL - 1))) == 2
-    assert len(Matches(tmp_path).read(NOW + timedelta(seconds=LIVE_TTL + 1))) == 1
-    assert Matches(tmp_path).read(NOW + timedelta(minutes=31)) == []
+    assert len(Matches(tmp_path, bookmakers=SOURCES).read(NOW + timedelta(seconds=LIVE_TTL - 1))) == 2
+    assert len(Matches(tmp_path, bookmakers=SOURCES).read(NOW + timedelta(seconds=LIVE_TTL + 1))) == 1
+    assert Matches(tmp_path, bookmakers=SOURCES).read(NOW + timedelta(minutes=31)) == []
 
 
 def test_per_match_expiry_preserves_prematch_in_mixed_snapshot(tmp_path):
     data = snapshot(tmp_path, "pari", expires_at=(NOW + timedelta(minutes=30)).isoformat())
     data["expires_at"] = (NOW + timedelta(seconds=60)).isoformat()
     (tmp_path / "pari" / "latest.json").write_text(json.dumps(data))
-    assert len(Matches(tmp_path).read(NOW + timedelta(minutes=5))) == 1
+    assert len(Matches(tmp_path, bookmakers=SOURCES).read(NOW + timedelta(minutes=5))) == 1
 
 
 def test_dates_use_moscow_day_at_utc_midnight_boundary():
@@ -131,7 +132,7 @@ def test_envy_alias_merges_bookmakers_with_seconds_difference(tmp_path):
         p1=1.6,
         p2=2.6,
     )
-    rows = Matches(tmp_path).read(NOW)
+    rows = Matches(tmp_path, bookmakers=SOURCES).read(NOW)
     assert len(rows) == 1
     assert (rows[0]["team1"], rows[0]["team2"]) == ("Envy", "HEROIC")
     assert [(o["p1"], o["p2"]) for o in rows[0]["offers"]] == [(1.6, 2.6), (1.5, 2.5)]
@@ -149,7 +150,7 @@ def test_yakult_novus_merges_and_prefers_scheduled_time(tmp_path):
         tmp_path, "winline", sport="dota2", team1="YAKULT BROTHERS", team2="NOVUS GAMING", best_of=None,
         starts_at=start.isoformat(), start_label="Завтра 01:00", p1=1.45, p2=2.56,
     )
-    rows = Matches(tmp_path).read(NOW)
+    rows = Matches(tmp_path, bookmakers=SOURCES).read(NOW)
     assert len(rows) == 1
     assert rows[0]["starts_at"] == start.isoformat()
     assert start_label(rows[0], NOW) == "завтра 01:00"
@@ -160,7 +161,7 @@ def test_countdown_only_display_never_keeps_previous_minute(tmp_path):
     from services.matches import start_label
 
     snapshot(tmp_path, "leon", starts_at="2026-10-05T01:59:12Z", start_label="Начало через 5 часов 59 мин.")
-    rows = Matches(tmp_path).read(NOW)
+    rows = Matches(tmp_path, bookmakers=SOURCES).read(NOW)
     assert start_label(rows[0], NOW) == "завтра 05:00"
 
 
@@ -169,7 +170,7 @@ def test_unlisted_branding_variant_keeps_price_orientation(tmp_path, reversed_or
     snapshot(tmp_path, "leon", team1="Newcomers", team2="Opponent")
     names = ("Opponent", "Newcomers Gaming") if reversed_order else ("Newcomers Gaming", "Opponent")
     snapshot(tmp_path, "winline", team1=names[0], team2=names[1], p1=1.8, p2=2.2)
-    rows = Matches(tmp_path).read(NOW)
+    rows = Matches(tmp_path, bookmakers=SOURCES).read(NOW)
     assert len(rows) == 1
     assert (rows[0]["team1"], rows[0]["team2"]) == ("Newcomers", "Opponent")
     offer = next(o for o in rows[0]["offers"] if o["bookmaker"] == "winline")
@@ -187,7 +188,7 @@ def test_branding_match_requires_unambiguous_event_context(tmp_path, changes):
     snapshot(tmp_path, "leon", team1="Newcomers", team2="Opponent")
     candidate = dict(team1="Newcomers Gaming", team2="Opponent") | changes
     snapshot(tmp_path, "winline", **candidate)
-    assert len(Matches(tmp_path).read(NOW)) == 2
+    assert len(Matches(tmp_path, bookmakers=SOURCES).read(NOW)) == 2
 
 
 def test_branding_does_not_choose_between_two_events_at_one_bookmaker(tmp_path):
@@ -195,7 +196,7 @@ def test_branding_does_not_choose_between_two_events_at_one_bookmaker(tmp_path):
     data = snapshot(tmp_path, "winline", team1="Newcomers Gaming", team2="Opponent")
     data["matches"].append(dict(data["matches"][0], id="second"))
     (tmp_path / "winline" / "latest.json").write_text(json.dumps(data))
-    assert len(Matches(tmp_path).read(NOW)) == 3
+    assert len(Matches(tmp_path, bookmakers=SOURCES).read(NOW)) == 3
 
 
 def test_branding_does_not_bridge_conflicting_start_times(tmp_path):
@@ -208,7 +209,7 @@ def test_branding_does_not_bridge_conflicting_start_times(tmp_path):
         tmp_path, "winline", team1="Newcomers Esports", team2="Opponent",
         starts_at=(NOW + timedelta(hours=2, minutes=8)).isoformat(),
     )
-    assert len(Matches(tmp_path).read(NOW)) == 3
+    assert len(Matches(tmp_path, bookmakers=SOURCES).read(NOW)) == 3
 
 
 def test_chronological_order_puts_unknown_times_last(tmp_path):
@@ -220,7 +221,7 @@ def test_chronological_order_puts_unknown_times_last(tmp_path):
         dict(original, id="early", starts_at=(NOW + timedelta(hours=1)).isoformat()),
     ]
     (tmp_path / "pari" / "latest.json").write_text(json.dumps(data))
-    rows = Matches(tmp_path).read(NOW)
+    rows = Matches(tmp_path, bookmakers=SOURCES).read(NOW)
     assert [r["starts_at"] for r in rows] == [data["matches"][i]["starts_at"] for i in (2, 0, 1)]
 
 
@@ -232,7 +233,7 @@ def test_browser_capture_time_is_not_extended_by_later_pages(tmp_path):
         fetched_at=(NOW - timedelta(seconds=LIVE_TTL + 1)).isoformat(),
         expires_at=(NOW + timedelta(seconds=60)).isoformat(),
     )
-    assert Matches(tmp_path).read(NOW) == []
+    assert Matches(tmp_path, bookmakers=SOURCES).read(NOW) == []
 
 
 def test_live_matches_precede_earlier_upcoming_and_unknown_times(tmp_path):
@@ -245,7 +246,7 @@ def test_live_matches_precede_earlier_upcoming_and_unknown_times(tmp_path):
         dict(base, id="live-earlier", status="live", starts_at=(NOW - timedelta(hours=1)).isoformat()),
     ]
     (tmp_path / "pari" / "latest.json").write_text(json.dumps(data))
-    rows = Matches(tmp_path).read(NOW)
+    rows = Matches(tmp_path, bookmakers=SOURCES).read(NOW)
     assert [r["status"] for r in rows] == ["live", "live", "live", "prematch"]
     assert [r["starts_at"] for r in rows] == [data["matches"][i]["starts_at"] for i in (3, 2, 1, 0)]
 
@@ -274,7 +275,7 @@ def test_nuclear_fokus_live_merges_four_sources_without_start_times(tmp_path):
         starts_at=None,
         tournament="CS 2. PGL. Бухарест. Открытая квалификация. Матч из 3-х карт",
     )
-    rows = Matches(tmp_path).read(NOW)
+    rows = Matches(tmp_path, bookmakers=SOURCES).read(NOW)
     assert len(rows) == 1
     assert rows[0]["team1"] == "Nuclear TigeRES"
     offers = {offer["bookmaker"]: offer for offer in rows[0]["offers"]}
@@ -286,7 +287,7 @@ def test_nuclear_fokus_live_merges_four_sources_without_start_times(tmp_path):
 def test_live_pair_merges_when_neither_source_knows_start(tmp_path):
     snapshot(tmp_path, "leon", status="live", starts_at=None, best_of=None)
     snapshot(tmp_path, "marathon", status="live", starts_at=None)
-    rows = Matches(tmp_path).read(NOW)
+    rows = Matches(tmp_path, bookmakers=SOURCES).read(NOW)
     assert len(rows) == 1
     assert len(rows[0]["offers"]) == 2
 
@@ -307,14 +308,14 @@ def test_unknown_live_fields_do_not_bridge_conflicting_events(tmp_path, conflict
         path.write_text(json.dumps(data))
     else:
         snapshot(tmp_path, "pari", **changes)
-    assert len(Matches(tmp_path).read(NOW)) == 3
+    assert len(Matches(tmp_path, bookmakers=SOURCES).read(NOW)) == 3
 
 
 def test_live_fallback_never_merges_prematch_or_other_discipline(tmp_path):
     snapshot(tmp_path, "leon", status="live", starts_at=None)
     snapshot(tmp_path, "marathon", status="prematch", starts_at=None)
     snapshot(tmp_path, "pari", status="live", sport="dota2", starts_at=None)
-    assert len(Matches(tmp_path).read(NOW)) == 3
+    assert len(Matches(tmp_path, bookmakers=SOURCES).read(NOW)) == 3
 
 
 def test_stale_live_offer_is_excluded_from_merged_match(tmp_path):
@@ -326,7 +327,7 @@ def test_stale_live_offer_is_excluded_from_merged_match(tmp_path):
         starts_at=None,
         fetched_at=(NOW - timedelta(seconds=LIVE_TTL + 1)).isoformat(),
     )
-    rows = Matches(tmp_path).read(NOW)
+    rows = Matches(tmp_path, bookmakers=SOURCES).read(NOW)
     assert len(rows) == 1
     assert [offer["bookmaker"] for offer in rows[0]["offers"]] == ["leon"]
 
@@ -334,7 +335,7 @@ def test_stale_live_offer_is_excluded_from_merged_match(tmp_path):
 def test_hltv_names_normalized_before_merging_sources(tmp_path):
     snapshot(tmp_path, "pari", team1="Ninjas in Pyjamas", team2="BB Team")
     snapshot(tmp_path, "fonbet", team1="BETBOOM", team2="NIP", p1=1.6, p2=2.6, url="https://fon.bet/sports/10")
-    rows = Matches(tmp_path).read(NOW)
+    rows = Matches(tmp_path, bookmakers=SOURCES).read(NOW)
     assert len(rows) == 1
     assert (rows[0]["team1"], rows[0]["team2"]) == ("BETBOOM", "NIP")
     assert [(o["p1"], o["p2"]) for o in rows[0]["offers"]] == [(1.6, 2.6), (1.5, 2.5)]

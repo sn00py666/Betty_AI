@@ -6,6 +6,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, HttpUrl, field_validator
 
 from services.matches import BOOKMAKERS
+from services.partners import PARTNER_URLS
 
 
 class BonusOffer(BaseModel):
@@ -24,12 +25,16 @@ class BonusOffer(BaseModel):
 
 
 def ordered_offers(settings):
-    return sorted((o for o in settings.bonus_offers if o.enabled), key=lambda o: (o.priority, o.bookmaker))
+    return sorted(
+        (o for o in settings.bonus_offers if o.enabled and o.bookmaker in PARTNER_URLS),
+        key=lambda o: (o.priority, o.bookmaker),
+    )
 
 
 def render_bonus(offers):
     from services.emojis import bookmaker_name
 
+    offers = [o for o in offers if o.enabled and o.bookmaker in PARTNER_URLS]
     lines = ["<b>Бонусы букмекеров</b>"]
     if not offers:
         lines.append("Сейчас нет опубликованных бонусных предложений. Загляни позже.")

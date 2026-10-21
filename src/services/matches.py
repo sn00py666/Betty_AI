@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 
 from integrations.bookmakers import SOURCES, price
 from services.freshness import LIVE_TTL, PREMATCH_TTL
+from services.partners import active_bookmakers
 from services.team_aliases import accepted_alias, load_aliases
 from services.team_names import branding_key, canonical_name, team_key
 
@@ -166,14 +167,15 @@ def market_probability(match):
 
 
 class Matches:
-    def __init__(self, directory: Path):
+    def __init__(self, directory: Path, *, bookmakers=None):
         self.directory = directory
+        self.bookmakers = active_bookmakers() if bookmakers is None else tuple(bookmakers)
 
     def read(self, now=None, *, use_resolutions=True):
         now = now or datetime.now(UTC)
         aliases = load_aliases(self.directory.parent / "team_aliases.json", now.timestamp()) if use_resolutions else {}
         rows = []
-        for bookmaker in SOURCES:
+        for bookmaker in self.bookmakers:
             path = self.directory / bookmaker / "latest.json"
             try:
                 snapshot = json.loads(path.read_text())

@@ -53,7 +53,9 @@ def test_marathon_real_live_page_reads_series_and_ignores_other_sports():
 
 @pytest.mark.parametrize("name", ["fonbet", "pari", "marathon"])
 @pytest.mark.parametrize("empty", [False, True])
-async def test_live_refresh_promotes_event_removes_finished_and_preserves_prematch(tmp_path, name, empty):
+async def test_live_refresh_promotes_event_removes_finished_and_preserves_prematch(tmp_path, name, empty, monkeypatch):
+    # Exercise dormant integrations independently of the production partner selection.
+    monkeypatch.setattr("collect.active_bookmakers", lambda: tuple(SOURCES))
     now = time.time()
     observed = datetime.fromtimestamp(now - 120, UTC).isoformat()
     expiry = datetime.fromtimestamp(now + 1600, UTC).isoformat()
