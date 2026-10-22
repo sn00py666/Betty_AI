@@ -8,6 +8,8 @@ from html import escape
 from aiogram.exceptions import TelegramAPIError, TelegramForbiddenError
 
 from keyboards.menu import keyboard
+from services.discovery import sort_matches
+from services.dota_rankings import enabled_sources, select_ranking
 from services.matches import MOSCOW, date, market_probability, start_label
 
 logger = logging.getLogger(__name__)
@@ -46,10 +48,15 @@ def scheduled(user, items, now):
     yield key, text, keyboard(buttons)
 
 
-async def run(bot, users, matches):
+async def run(bot, users, matches, settings=None):
     while True:
         now = datetime.now(UTC)
         items = matches.read()
+        local = now.astimezone(MOSCOW)
+        if local.hour == 12 and local.minute < 10:
+            # Общий порядок для всех подписчиков, до фильтра дисциплины и лимита пяти матчей.
+            _, dota_ranks, _ = select_ranking(matches.directory.parent, enabled_sources(settings))
+            items = sort_matches(items, "popular", matches.directory.parent / "valve.json", dota_ranks=dota_ranks)
         for user_id, user in list(users.data.items()):
             sent = list(user.get("sent_notifications", []))
             for key, text, markup in scheduled(user, items, now):

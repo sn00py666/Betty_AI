@@ -58,7 +58,7 @@ async def main() -> None:
                 )
             except TelegramAPIError as error:
                 logging.getLogger(__name__).warning("Меню модератора недоступно (%s)", type(error).__name__)
-        notifications = asyncio.create_task(run(bot, users, matches))
+        notifications = asyncio.create_task(run(bot, users, matches, settings))
         health = asyncio.create_task(heartbeat(PROJECT_ROOT / "data" / "health" / "bot.json"))
         try:
             await dispatcher.start_polling(bot, allowed_updates=dispatcher.resolve_used_update_types())
