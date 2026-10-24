@@ -109,7 +109,8 @@ def test_team2_favorite_best_price_and_button_order(match):
         "<blockquote><i>18+. Не финансовый совет, коэффициент на сайте мог измениться</i></blockquote>"
     )
     buttons = menu.offers(match, "team2").inline_keyboard
-    assert "П1 2.40 / П2 1.60" in buttons[0][0].text
+    assert buttons[0][0].text == "Winline · фрибет 10 000 ₽"
+    assert buttons[1][0].text == "Марафон · фрибет 11 111 ₽"
     assert all(b.callback_data != "bonus" for row in buttons for b in row)
     assert match["offers"][1]["p1"] == 1.6 and match["offers"][1]["p2"] == 2.4
     assert "Лучший коэффициент на фаворита: <b>2.40</b>" in text

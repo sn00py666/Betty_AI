@@ -3,7 +3,14 @@ from unittest.mock import AsyncMock
 import pytest
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
-from aiogram.methods import AnswerCallbackQuery, EditMessageReplyMarkup, EditMessageText, SendAnimation, SendMessage
+from aiogram.methods import (
+    AnswerCallbackQuery,
+    EditMessageReplyMarkup,
+    EditMessageText,
+    SendAnimation,
+    SendMessage,
+    SendPhoto,
+)
 from aiogram.types import Message, Update
 
 from config import Settings
@@ -29,7 +36,7 @@ async def bot(monkeypatch):
     async with Bot(token="123456:TEST_TOKEN", default=DefaultBotProperties(parse_mode="HTML")) as instance:
 
         async def reply(bot, method, **kwargs):
-            if isinstance(method, SendMessage | EditMessageText | SendAnimation):
+            if isinstance(method, SendMessage | EditMessageText | SendAnimation | SendPhoto):
                 return Message(message_id=10, date=1, chat={"id": method.chat_id, "type": "private"}).as_(bot)
             return True
 
@@ -131,7 +138,10 @@ async def test_real_analysis_then_actual_bookmaker_link(dispatcher, bot, users, 
     assert len(rows) == 1 and len(rows[0]) == 1
     assert rows[0][0].text == "🔔 Напомнить за 30 минут"
     menu.asyncio.sleep.assert_awaited_once_with(6)
-    offers = requests(bot, SendMessage)[-1]
+    offers = requests(bot, SendPhoto)[-1]
+    assert offers.photo.path.is_file()
+    assert offers.photo.path.name == "betty-freebets-21111.png"
+    assert "Нет актуального фаворита AI" in offers.caption
     assert offers.reply_markup.inline_keyboard[0][0].url == "https://bett1.pro/click?o=354&a=53074&tsource=1015"
 
 
@@ -268,10 +278,21 @@ async def test_favorite_survives_odds_button_but_not_changed_match(
     await dispatcher.feed_update(
         bot, incoming(callback="match:" + match["id"]), users=users, matches=matches, analyst=analyst
     )
-    assert "— фаворит против" in requests(bot, SendMessage)[-1].text
+    assert "— фаворит против" in requests(bot, SendPhoto)[-1].caption
     update = incoming(callback="odds:" + match["id"], message_id=10)
     await dispatcher.feed_update(bot, update, users=users, matches=matches)
-    assert "— фаворит против" in requests(bot, SendMessage)[-1].text
+    assert "— фаворит против" in requests(bot, SendPhoto)[-1].caption
     monkeypatch.setattr(matches, "get", lambda _: dict(match, status="live"))
     await dispatcher.feed_update(bot, update, users=users, matches=matches)
-    assert "Нет актуального фаворита AI" in requests(bot, SendMessage)[-1].text
+    assert "Нет актуального фаворита AI" in requests(bot, SendPhoto)[-1].caption
+
+
+async def test_long_offers_keep_full_text_below_photo(monkeypatch):
+    text = "Длинное название команды " * 100
+    monkeypatch.setattr(menu, "render_offers", lambda *args: text)
+    message = AsyncMock()
+    await menu.show_offers(message, {"offers": []})
+    message.answer_photo.assert_awaited_once()
+    assert "caption" not in message.answer_photo.call_args.kwargs
+    assert message.answer.call_args.args == (text,)
+    assert message.answer.call_args.kwargs["reply_markup"].inline_keyboard

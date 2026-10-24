@@ -49,7 +49,15 @@ async def show_matches(message, user_id, users, matches, page=0, edit=False, set
 
 
 async def show_offers(message, match, favorite=None):
-    await message.answer(render_offers(match, favorite), reply_markup=menu.offers(match, favorite))
+    text = render_offers(match, favorite)
+    markup = menu.offers(match, favorite)
+    photo = FSInputFile(PROJECT_ROOT / "assets" / "betty-freebets-21111.png")
+    # Консервативно учитываем и HTML: длинный текст сохраняем отдельным сообщением.
+    if len(text.encode("utf-16-le")) // 2 > 1024:
+        await message.answer_photo(photo)
+        await message.answer(text, reply_markup=markup)
+    else:
+        await message.answer_photo(photo, caption=text, reply_markup=markup)
 
 
 @router.message(CommandStart())

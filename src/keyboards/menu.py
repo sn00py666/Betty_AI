@@ -6,6 +6,7 @@ from services.matches import BOOKMAKERS, start_label
 from services.partners import PARTNER_URLS, public_offers
 
 PAGE_SIZE = 5
+FREEBET_LABELS = {"marathon": "фрибет 11 111 ₽", "winline": "фрибет 10 000 ₽"}
 
 
 def keyboard(buttons):
@@ -61,13 +62,13 @@ def offers(match, favorite=None):
     for offer in sorted(public_offers(match["offers"]), key=lambda o: o[side] or 0, reverse=True):
         if offer["p1"] is None and offer["p2"] is None:
             continue
-        first_price, second_price = (offer["p2"], offer["p1"]) if favorite == "team2" else (offer["p1"], offer["p2"])
-        p1 = f"{first_price:.2f}" if first_price else "закрыт"
-        p2 = f"{second_price:.2f}" if second_price else "закрыт"
+        label = BOOKMAKERS[offer["bookmaker"]]
+        if freebet := FREEBET_LABELS.get(offer["bookmaker"]):
+            label += f" · {freebet}"
         rows.append(
             [
                 InlineKeyboardButton(
-                    text=f"{BOOKMAKERS[offer['bookmaker']]} · П1 {p1} / П2 {p2}",
+                    text=label,
                     url=offer["url"],
                     icon_custom_emoji_id=bookmaker_icon(offer["bookmaker"]),
                 )
