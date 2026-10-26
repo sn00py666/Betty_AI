@@ -6,6 +6,8 @@ PARTNER_URLS = {
 }
 
 
+FREEBET_LABELS = {"marathon": "фрибет 11 111 ₽", "winline": "фрибет 10 000 ₽"}
+
 def active_bookmakers():
     return tuple(PARTNER_URLS)
 

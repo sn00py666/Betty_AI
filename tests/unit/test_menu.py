@@ -263,7 +263,13 @@ async def test_bonus_command_and_old_button_open_separate_screen(dispatcher, bot
     for update in (incoming(text="/bonus"), incoming(callback="bonus")):
         await dispatcher.feed_update(bot, update, settings=settings)
         text = requests(bot, SendMessage)[-1].text
-        assert "Бонусы букмекеров" in text and "нет опубликованных" in text and "Ближайшие матчи" not in text
+        assert "<b>Бонусы</b>" in text and "нет опубликованных" not in text
+        assert "Фрибет 11 111 ₽" in text and "Фрибет 10 000 ₽" in text
+        urls = [b.url for row in requests(bot, SendMessage)[-1].reply_markup.inline_keyboard for b in row if b.url]
+        assert urls == [
+            "https://bett1.pro/click?o=354&a=53074&tsource=1015",
+            "https://bett1.pro/click?o=159&a=53074&tsource=1015&link_id=5155",
+        ]
 
 
 async def test_favorite_survives_odds_button_but_not_changed_match(

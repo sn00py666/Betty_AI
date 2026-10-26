@@ -42,7 +42,7 @@ async def main() -> None:
             BotCommand(command="start", description="Выбрать дисциплину"),
             BotCommand(command="info", description="Как работает Betty"),
             BotCommand(command="askbetty", description="Спросить Betty о матче"),
-            BotCommand(command="bonus", description="Бонусы букмекеров"),
+            BotCommand(command="bonus", description="Бонусы"),
             BotCommand(command="notifications", description="Подборки и напоминания"),
         ]
         await bot.set_my_commands(

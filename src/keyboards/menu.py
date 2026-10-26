@@ -3,10 +3,9 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from content import SPORTS
 from services.emojis import bookmaker_icon
 from services.matches import BOOKMAKERS, start_label
-from services.partners import PARTNER_URLS, public_offers
+from services.partners import FREEBET_LABELS, PARTNER_URLS, public_offers
 
 PAGE_SIZE = 5
-FREEBET_LABELS = {"marathon": "фрибет 11 111 ₽", "winline": "фрибет 10 000 ₽"}
 
 
 def keyboard(buttons):
@@ -46,7 +45,7 @@ def matches(items, sport, page, mode="popular"):
 
 
 def navigation():
-    return keyboard([("👀 Выбрать матчи", "matches"), ("🎁 Бонусы букмекеров", "bonus")])
+    return keyboard([("👀 Выбрать матчи", "matches"), ("🎁 Бонусы", "bonus")])
 
 
 def match_actions(match, reminder_set=False):
